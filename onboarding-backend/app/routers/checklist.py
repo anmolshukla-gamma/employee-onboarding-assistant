@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from datetime import datetime
-
+from datetime import datetime
+from app.models.comment import ChecklistComment
+from app.schemas.comment import CommentCreate, CommentResponse
 
 from app.database import get_db
 from app.models.user import User
@@ -9,6 +11,10 @@ from app.models.checklist import Checklist, ChecklistItem, UserProgress
 from app.schemas.checklist import ChecklistResponse, ChecklistItemResponse, MarkCompleteRequest
 from app.core.dependencies import get_current_user
 import json
+
+from datetime import datetime
+from app.models.comment import ChecklistComment
+from app.schemas.comment import CommentResponse, CommentReview
 
 router = APIRouter(prefix="/checklist", tags=["Checklist"])
 
@@ -124,3 +130,91 @@ def dump_resources(value):
     if isinstance(value, str):
         return value
     return json.dumps(value)
+
+
+@router.post("/items/{item_id}/comments", response_model=CommentResponse, status_code=201)
+def add_comment(
+    item_id: int,
+    data: CommentCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    item = db.query(ChecklistItem).filter(ChecklistItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Checklist item not found")
+
+    if not data.comment.strip():
+        raise HTTPException(status_code=400, detail="Comment cannot be empty")
+
+    allowed_types = {"suggestion", "issue", "outdated"}
+    if data.comment_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Invalid comment_type")
+
+    row = ChecklistComment(
+        checklist_item_id=item_id,
+        user_id=current_user.id,
+        comment=data.comment.strip(),
+        comment_type=data.comment_type,
+        status="pending"
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@router.get("/items/{item_id}/comments", response_model=list[CommentResponse])
+def list_item_comments(
+    item_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # employees can see their own comments on the item
+    return db.query(ChecklistComment).filter(
+        ChecklistComment.checklist_item_id == item_id,
+        ChecklistComment.user_id == current_user.id
+    ).order_by(ChecklistComment.created_at.desc()).all()
+
+
+@router.post("/items/{item_id}/comments", response_model=CommentResponse, status_code=201)
+def add_comment(
+    item_id: int,
+    data: CommentCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    item = db.query(ChecklistItem).filter(ChecklistItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Checklist item not found")
+
+    if not data.comment.strip():
+        raise HTTPException(status_code=400, detail="Comment cannot be empty")
+
+    allowed_types = {"suggestion", "issue", "outdated"}
+    if data.comment_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Invalid comment_type")
+
+    row = ChecklistComment(
+        checklist_item_id=item_id,
+        user_id=current_user.id,
+        comment=data.comment.strip(),
+        comment_type=data.comment_type,
+        status="pending"
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@router.get("/items/{item_id}/comments", response_model=list[CommentResponse])
+def list_item_comments(
+    item_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # employees can see their own comments on the item
+    return db.query(ChecklistComment).filter(
+        ChecklistComment.checklist_item_id == item_id,
+        ChecklistComment.user_id == current_user.id
+    ).order_by(ChecklistComment.created_at.desc()).all()

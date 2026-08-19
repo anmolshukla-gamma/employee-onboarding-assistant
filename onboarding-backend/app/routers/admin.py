@@ -1,6 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from app.core.security import hash_password
 from typing import List
+from app.models.team import Team, Tool, TeamTool, UserTeam
+from app.schemas.team import (
+    TeamCreate, TeamUpdate, TeamResponse,
+    ToolCreate, ToolUpdate, ToolResponse,
+    TeamToolCreate, TeamToolResponse,
+    UserTeamAssign
+)
 
 from app.database import get_db
 from app.models.user import User
@@ -14,6 +22,16 @@ from app.schemas.role import (
     ChecklistItemCreate, ChecklistItemUpdate, ChecklistItemResponse
 )
 from app.core.dependencies import get_current_admin
+from app.models.role import Role
+from app.models.checklist import Checklist, ChecklistItem, UserProgress
+from app.models.team import UserTeam, Team
+from app.schemas.admin import UserProgressSummary, UserProgressDetail, UserProgressItem,AdminUserCreate
+
+from datetime import datetime
+from app.models.comment import ChecklistComment
+from app.schemas.comment import CommentResponse, CommentReview
+
+
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -359,3 +377,479 @@ def delete_checklist_item(
     db.delete(item)
     db.commit()
     return {"message": "Checklist item deleted successfully"}
+
+# ====================== TEAMS ======================
+
+@router.post("/teams", response_model=TeamResponse, status_code=201)
+def create_team(
+    data: TeamCreate,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    exists = db.query(Team).filter(Team.name == data.name).first()
+    if exists:
+        raise HTTPException(status_code=400, detail="Team name already exists")
+
+    team = Team(
+        name=data.name,
+        description=data.description,
+        is_active=data.is_active
+    )
+    db.add(team)
+    db.commit()
+    db.refresh(team)
+    return team
+
+
+@router.get("/teams", response_model=List[TeamResponse])
+def list_teams(
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    return db.query(Team).order_by(Team.name).all()
+
+
+@router.put("/teams/{team_id}", response_model=TeamResponse)
+def update_team(
+    team_id: int,
+    data: TeamUpdate,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    team = db.query(Team).filter(Team.id == team_id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    if data.name is not None:
+        conflict = db.query(Team).filter(Team.name == data.name, Team.id != team_id).first()
+        if conflict:
+            raise HTTPException(status_code=400, detail="Team name already exists")
+        team.name = data.name
+    if data.description is not None:
+        team.description = data.description
+    if data.is_active is not None:
+        team.is_active = data.is_active
+
+    db.commit()
+    db.refresh(team)
+    return team
+
+
+@router.delete("/teams/{team_id}")
+def delete_team(
+    team_id: int,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    team = db.query(Team).filter(Team.id == team_id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    users_count = db.query(UserTeam).filter(UserTeam.team_id == team_id).count()
+    if users_count > 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot delete team. {users_count} user(s) are assigned to it."
+        )
+
+    db.query(TeamTool).filter(TeamTool.team_id == team_id).delete()
+    db.delete(team)
+    db.commit()
+    return {"message": "Team deleted successfully"}
+
+
+# ====================== TOOLS ======================
+
+@router.post("/tools", response_model=ToolResponse, status_code=201)
+def create_tool(
+    data: ToolCreate,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    exists = db.query(Tool).filter(Tool.name == data.name).first()
+    if exists:
+        raise HTTPException(status_code=400, detail="Tool name already exists")
+
+    tool = Tool(
+        name=data.name,
+        description=data.description,
+        category=data.category,
+        request_url=data.request_url,
+        guide_text=data.guide_text,
+        is_active=data.is_active
+    )
+    db.add(tool)
+    db.commit()
+    db.refresh(tool)
+    return tool
+
+
+@router.get("/tools", response_model=List[ToolResponse])
+def list_tools(
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    return db.query(Tool).order_by(Tool.name).all()
+
+
+@router.put("/tools/{tool_id}", response_model=ToolResponse)
+def update_tool(
+    tool_id: int,
+    data: ToolUpdate,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    tool = db.query(Tool).filter(Tool.id == tool_id).first()
+    if not tool:
+        raise HTTPException(status_code=404, detail="Tool not found")
+
+    if data.name is not None:
+        conflict = db.query(Tool).filter(Tool.name == data.name, Tool.id != tool_id).first()
+        if conflict:
+            raise HTTPException(status_code=400, detail="Tool name already exists")
+        tool.name = data.name
+    if data.description is not None:
+        tool.description = data.description
+    if data.category is not None:
+        tool.category = data.category
+    if data.request_url is not None:
+        tool.request_url = data.request_url
+    if data.guide_text is not None:
+        tool.guide_text = data.guide_text
+    if data.is_active is not None:
+        tool.is_active = data.is_active
+
+    db.commit()
+    db.refresh(tool)
+    return tool
+
+
+@router.delete("/tools/{tool_id}")
+def delete_tool(
+    tool_id: int,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    tool = db.query(Tool).filter(Tool.id == tool_id).first()
+    if not tool:
+        raise HTTPException(status_code=404, detail="Tool not found")
+
+    db.query(TeamTool).filter(TeamTool.tool_id == tool_id).delete()
+    db.delete(tool)
+    db.commit()
+    return {"message": "Tool deleted successfully"}
+
+
+# ====================== TEAM TOOL MAPPING ======================
+
+@router.post("/teams/{team_id}/tools", response_model=TeamToolResponse, status_code=201)
+def add_tool_to_team(
+    team_id: int,
+    data: TeamToolCreate,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    team = db.query(Team).filter(Team.id == team_id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    tool = db.query(Tool).filter(Tool.id == data.tool_id).first()
+    if not tool:
+        raise HTTPException(status_code=404, detail="Tool not found")
+
+    exists = db.query(TeamTool).filter(
+        TeamTool.team_id == team_id,
+        TeamTool.tool_id == data.tool_id
+    ).first()
+    if exists:
+        raise HTTPException(status_code=400, detail="Tool already mapped to this team")
+
+    row = TeamTool(
+        team_id=team_id,
+        tool_id=data.tool_id,
+        is_mandatory=data.is_mandatory,
+        order=data.order
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@router.get("/teams/{team_id}/tools", response_model=List[TeamToolResponse])
+def list_team_tools(
+    team_id: int,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    team = db.query(Team).filter(Team.id == team_id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    return db.query(TeamTool).filter(
+        TeamTool.team_id == team_id
+    ).order_by(TeamTool.order).all()
+
+
+@router.delete("/teams/{team_id}/tools/{tool_id}")
+def remove_tool_from_team(
+    team_id: int,
+    tool_id: int,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    row = db.query(TeamTool).filter(
+        TeamTool.team_id == team_id,
+        TeamTool.tool_id == tool_id
+    ).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Team tool mapping not found")
+
+    db.delete(row)
+    db.commit()
+    return {"message": "Tool removed from team"}
+
+
+# ====================== ASSIGN USER TEAM ======================
+
+@router.patch("/users/{user_id}/team")
+def assign_user_team(
+    user_id: int,
+    data: UserTeamAssign,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    team = db.query(Team).filter(Team.id == data.team_id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    existing = db.query(UserTeam).filter(UserTeam.user_id == user_id).first()
+    if existing:
+        existing.team_id = data.team_id
+    else:
+        db.add(UserTeam(user_id=user_id, team_id=data.team_id))
+
+    db.commit()
+    return {"message": "User assigned to team successfully", "user_id": user_id, "team_id": data.team_id}
+
+
+
+# ====================== USER PROGRESS ======================
+
+@router.get("/progress", response_model=List[UserProgressSummary])
+def list_users_progress(
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    users = db.query(User).order_by(User.created_at.desc()).all()
+    result = []
+
+    for user in users:
+        role_name = None
+        total = 0
+        completed = 0
+
+        if user.role_id:
+            role = db.query(Role).filter(Role.id == user.role_id).first()
+            role_name = role.name if role else None
+
+            checklist = db.query(Checklist).filter(Checklist.role_id == user.role_id).first()
+            if checklist:
+                items = db.query(ChecklistItem).filter(
+                    ChecklistItem.checklist_id == checklist.id
+                ).all()
+                total = len(items)
+                item_ids = [i.id for i in items]
+
+                if item_ids:
+                    completed = db.query(UserProgress).filter(
+                        UserProgress.user_id == user.id,
+                        UserProgress.checklist_item_id.in_(item_ids),
+                        UserProgress.is_completed == True
+                    ).count()
+
+        team_id = None
+        team_name = None
+        user_team = db.query(UserTeam).filter(UserTeam.user_id == user.id).first()
+        if user_team:
+            team = db.query(Team).filter(Team.id == user_team.team_id).first()
+            team_id = user_team.team_id
+            team_name = team.name if team else None
+
+        percent = round((completed / total) * 100, 1) if total > 0 else 0.0
+
+        result.append(UserProgressSummary(
+            user_id=user.id,
+            full_name=user.full_name,
+            email=user.email,
+            role_id=user.role_id,
+            role_name=role_name,
+            team_id=team_id,
+            team_name=team_name,
+            is_active=user.is_active,
+            total_items=total,
+            completed_items=completed,
+            progress_percent=percent
+        ))
+
+    return result
+
+
+@router.get("/progress/{user_id}", response_model=UserProgressDetail)
+def get_user_progress_detail(
+    user_id: int,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    role_name = None
+    items_response = []
+    total = 0
+    completed = 0
+
+    if user.role_id:
+        role = db.query(Role).filter(Role.id == user.role_id).first()
+        role_name = role.name if role else None
+
+        checklist = db.query(Checklist).filter(Checklist.role_id == user.role_id).first()
+        if checklist:
+            items = db.query(ChecklistItem).filter(
+                ChecklistItem.checklist_id == checklist.id
+            ).order_by(ChecklistItem.order).all()
+
+            completed_ids = {
+                p.checklist_item_id
+                for p in db.query(UserProgress).filter(
+                    UserProgress.user_id == user.id,
+                    UserProgress.is_completed == True
+                ).all()
+            }
+
+            for item in items:
+                is_done = item.id in completed_ids
+                if is_done:
+                    completed += 1
+                items_response.append(UserProgressItem(
+                    item_id=item.id,
+                    title=item.title,
+                    category=item.category,
+                    is_mandatory=item.is_mandatory,
+                    is_completed=is_done,
+                    order=item.order
+                ))
+
+            total = len(items)
+
+    team_id = None
+    team_name = None
+    user_team = db.query(UserTeam).filter(UserTeam.user_id == user.id).first()
+    if user_team:
+        team = db.query(Team).filter(Team.id == user_team.team_id).first()
+        team_id = user_team.team_id
+        team_name = team.name if team else None
+
+    percent = round((completed / total) * 100, 1) if total > 0 else 0.0
+
+    return UserProgressDetail(
+        user_id=user.id,
+        full_name=user.full_name,
+        email=user.email,
+        role_id=user.role_id,
+        role_name=role_name,
+        team_id=team_id,
+        team_name=team_name,
+        total_items=total,
+        completed_items=completed,
+        progress_percent=percent,
+        items=items_response
+    )
+
+@router.post("/users", status_code=201)
+def admin_create_user(
+    data: AdminUserCreate,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    existing = db.query(User).filter(User.email == data.email).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    if data.role_id is not None:
+        role = db.query(Role).filter(Role.id == data.role_id).first()
+        if not role:
+            raise HTTPException(status_code=404, detail="Role not found")
+
+    if data.team_id is not None:
+        team = db.query(Team).filter(Team.id == data.team_id).first()
+        if not team:
+            raise HTTPException(status_code=404, detail="Team not found")
+
+    user = User(
+        email=data.email,
+        full_name=data.full_name,
+        hashed_password=hash_password(data.password),
+        role_id=data.role_id,
+        is_admin=data.is_admin,
+        is_active=data.is_active
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    if data.team_id is not None:
+        db.add(UserTeam(user_id=user.id, team_id=data.team_id))
+        db.commit()
+
+    return {
+        "message": "User created successfully",
+        "user_id": user.id,
+        "email": user.email,
+        "role_id": user.role_id,
+        "team_id": data.team_id
+    }
+
+
+# ====================== CHECKLIST COMMENTS ======================
+
+@router.get("/comments", response_model=list[CommentResponse])
+def list_comments(
+    status: str | None = None,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    q = db.query(ChecklistComment)
+    if status:
+        q = q.filter(ChecklistComment.status == status)
+    return q.order_by(ChecklistComment.created_at.desc()).all()
+
+
+@router.patch("/comments/{comment_id}", response_model=CommentResponse)
+def review_comment(
+    comment_id: int,
+    data: CommentReview,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    row = db.query(ChecklistComment).filter(ChecklistComment.id == comment_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Comment not found")
+
+    allowed = {"approved", "rejected", "resolved"}
+    if data.status not in allowed:
+        raise HTTPException(status_code=400, detail="Invalid status")
+
+    row.status = data.status
+    row.admin_response = data.admin_response
+    row.reviewed_by = current_admin.id
+    row.reviewed_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(row)
+    return row

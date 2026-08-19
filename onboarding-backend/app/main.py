@@ -1,9 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base
-from app.models import user, role, checklist, document 
-from app.routers import auth,role,checklist,document,chat,admin
+from app.models import user, role, checklist, document,chat
+from app.routers import auth,role,checklist,document,chat,admin,access
 from app.models.chat import ChatMessage
+from app.models.team import Team, Tool, TeamTool, UserTeam
+from app.models.comment import ChecklistComment
 
 # Create's all tables
 Base.metadata.create_all(bind=engine)
@@ -29,6 +31,7 @@ app.include_router(checklist.router)
 app.include_router(document.router)
 app.include_router(chat.router)
 app.include_router(admin.router)
+app.include_router(access.router)
 
 
 @app.get("/")
