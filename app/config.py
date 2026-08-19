@@ -12,9 +12,12 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: Optional[str] = None
     GOOGLE_API_KEY: Optional[str] = None
 
-    GROQ_MODEL: str = "llama-3.1-8b-instant"
+    GROQ_MODEL: str = "openai/gpt-oss-120b"
     OPENAI_MODEL: str = "gpt-4o-mini"
     GEMINI_MODEL: str = "gemini-1.5-flash"
+
+    CHAT_HISTORY_LIMIT: int = 4
+    CHAT_SESSION_MINUTES: int = 30
 
     class Config:
         env_file = ".env"

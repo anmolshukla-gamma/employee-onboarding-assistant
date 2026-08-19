@@ -3,12 +3,14 @@ import shutil
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from typing import List, Optional
+from app.core.dependencies import get_current_user, get_current_admin
 
 from app.database import get_db
 from app.models.user import User
 from app.models.document import Document
 from app.schemas.document import DocumentResponse
 from app.core.dependencies import get_current_user,get_current_admin
+from app.rag.vectorstore import delete_documents_by_metadata
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
@@ -102,10 +104,17 @@ def delete_document(
             detail="Document not found"
         )
 
-    # Delete file from local storage
-    if os.path.exists(document.file_path):
+    # 1) Remove from vector DB (safe)
+    try:
+        delete_documents_by_metadata(document.id)
+    except Exception as e:
+        print(f"Vector delete skipped: {e}")
+
+    # 2) Remove local file
+    if document.file_path and os.path.exists(document.file_path):
         os.remove(document.file_path)
 
+    # 3) Remove DB row
     db.delete(document)
     db.commit()
 

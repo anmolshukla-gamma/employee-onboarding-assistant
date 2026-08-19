@@ -2,11 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from datetime import datetime
 
+
 from app.database import get_db
 from app.models.user import User
 from app.models.checklist import Checklist, ChecklistItem, UserProgress
 from app.schemas.checklist import ChecklistResponse, ChecklistItemResponse, MarkCompleteRequest
 from app.core.dependencies import get_current_user
+import json
 
 router = APIRouter(prefix="/checklist", tags=["Checklist"])
 
@@ -48,6 +50,8 @@ def get_my_checklist(
                 id=item.id,
                 title=item.title,
                 description=item.description,
+                detailed_guide=item.detailed_guide,
+                resources=parse_resources(item.resources),
                 category=item.category,
                 order=item.order,
                 is_mandatory=item.is_mandatory,
@@ -55,10 +59,17 @@ def get_my_checklist(
             )
         )
 
+    total = len(item_responses)
+    completed = sum(1 for i in item_responses if i.is_completed)
+    progress = round((completed / total) * 100, 1) if total > 0 else 0.0
+
     return ChecklistResponse(
         id=checklist.id,
         title=checklist.title,
         description=checklist.description,
+        total_items=total,
+        completed_items=completed,
+        progress_percent=progress,
         items=item_responses
     )
 
@@ -94,3 +105,22 @@ def mark_item_complete(
 
     db.commit()
     return {"message": "Checklist item marked as complete"}
+
+
+
+def parse_resources(value):
+    if value is None:
+        return []
+    if isinstance(value, (list, dict)):
+        return value
+    try:
+        return json.loads(value)
+    except Exception:
+        return []
+
+def dump_resources(value):
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    return json.dumps(value)

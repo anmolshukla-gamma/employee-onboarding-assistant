@@ -1,8 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base
-from app.models import user, role, checklist, document
+from app.models import user, role, checklist, document 
 from app.routers import auth,role,checklist,document,chat,admin
+from app.models.chat import ChatMessage
 
 # Create's all tables
 Base.metadata.create_all(bind=engine)

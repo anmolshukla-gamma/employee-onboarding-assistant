@@ -29,3 +29,12 @@ def search_similar_chunks(query: str, k: int = 4):
     vectorstore = get_vectorstore()
     results = vectorstore.similarity_search(query, k=k)
     return results
+
+def delete_documents_by_metadata(document_id: int):
+    try:
+        vectorstore = get_vectorstore()
+        # Try metadata filter delete
+        vectorstore._collection.delete(where={"document_id": int(document_id)})
+    except Exception as e:
+        # Do not crash API if chroma delete fails
+        print(f"Chroma delete warning for document_id={document_id}: {e}")

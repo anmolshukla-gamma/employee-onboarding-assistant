@@ -17,7 +17,9 @@ class ChecklistItem(Base):
     id = Column(Integer, primary_key=True, index=True)
     checklist_id = Column(Integer, ForeignKey("checklists.id"), nullable=False)
     title = Column(String, nullable=False)
-    description = Column(Text, nullable=True)
+    description = Column(Text, nullable=True)          # short summary for list
+    detailed_guide = Column(Text, nullable=True)       # full step-by-step guide
+    resources = Column(Text, nullable=True)            # JSON string of links/docs
     category = Column(String, nullable=True)
     order = Column(Integer, default=0)
     is_mandatory = Column(Boolean, default=True)

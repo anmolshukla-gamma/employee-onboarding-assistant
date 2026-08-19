@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -5,7 +7,9 @@ from pydantic import BaseModel
 from app.database import get_db
 from app.models.user import User
 from app.models.document import Document
-from app.core.dependencies import get_current_user
+from app.models.chat import ChatMessage
+from app.core.dependencies import get_current_user, get_current_admin
+from app.config import settings
 from app.rag.process import process_document
 from app.rag.chain import ask_question
 
@@ -21,7 +25,7 @@ class QuestionResponse(BaseModel):
 @router.post("/process/{document_id}")
 def process_uploaded_document(
     document_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     document = db.query(Document).filter(Document.id == document_id).first()
@@ -65,19 +69,46 @@ def process_uploaded_document(
 @router.post("/ask", response_model=QuestionResponse)
 def ask_ai_question(
     data: QuestionRequest,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     if not data.question.strip():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Question cannot be empty"
+        raise HTTPException(status_code=400, detail="Question cannot be empty")
+
+    cutoff = datetime.utcnow() - timedelta(minutes=settings.CHAT_SESSION_MINUTES)
+
+    recent = (
+        db.query(ChatMessage)
+        .filter(
+            ChatMessage.user_id == current_user.id,
+            ChatMessage.created_at >= cutoff
         )
+        .order_by(ChatMessage.created_at.desc())
+        .limit(settings.CHAT_HISTORY_LIMIT)
+        .all()
+    )
+    recent = list(reversed(recent))
+    history = [{"role": m.role, "content": m.content} for m in recent]
 
     try:
-        result = ask_question(data.question)
-        return result
+        result = ask_question(data.question, history=history)
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=500,
             detail=f"Failed to generate answer: {str(e)}"
         )
+
+    db.add(ChatMessage(user_id=current_user.id, role="user", content=data.question))
+    db.add(ChatMessage(user_id=current_user.id, role="assistant", content=result["answer"]))
+    db.commit()
+
+    return result
+
+@router.delete("/history")
+def clear_chat_history(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    db.query(ChatMessage).filter(ChatMessage.user_id == current_user.id).delete()
+    db.commit()
+    return {"message": "Chat history cleared"}
