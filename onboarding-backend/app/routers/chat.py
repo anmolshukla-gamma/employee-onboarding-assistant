@@ -66,6 +66,31 @@ def process_uploaded_document(
             detail=f"Failed to process document: {str(e)}"
         )
 
+def is_follow_up(question: str, history: list[dict]) -> bool:
+    if not history:
+        return False
+
+    q = question.lower().strip()
+
+    follow_up_starts = [
+        "what about",
+        "and ",
+        "who approves",
+        "how long",
+        "then ",
+        "after that",
+        "same for",
+        "for that",
+        "and then",
+    ]
+
+    if len(q.split()) <= 6 and any(x in q for x in [" it", " that", " this", " there"]):
+        return True
+
+    return any(q.startswith(x) for x in follow_up_starts)
+
+
+
 @router.post("/ask", response_model=QuestionResponse)
 def ask_ai_question(
     data: QuestionRequest,
@@ -75,30 +100,52 @@ def ask_ai_question(
     if not data.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
-    cutoff = datetime.utcnow() - timedelta(minutes=settings.CHAT_SESSION_MINUTES)
+    question = data.question.strip()
 
-    recent = (
-        db.query(ChatMessage)
-        .filter(
-            ChatMessage.user_id == current_user.id,
-            ChatMessage.created_at >= cutoff
-        )
-        .order_by(ChatMessage.created_at.desc())
-        .limit(settings.CHAT_HISTORY_LIMIT)
-        .all()
+    # ---------- Fix 1: checklist step questions ignore history ----------
+    is_checklist_step = question.lower().startswith(
+        "help me complete this onboarding step:"
     )
-    recent = list(reversed(recent))
-    history = [{"role": m.role, "content": m.content} for m in recent]
+
+    history = []
+    if not is_checklist_step:
+        cutoff = datetime.utcnow() - timedelta(minutes=settings.CHAT_SESSION_MINUTES)
+        recent = (
+            db.query(ChatMessage)
+            .filter(
+                ChatMessage.user_id == current_user.id,
+                ChatMessage.created_at >= cutoff
+            )
+            .order_by(ChatMessage.created_at.desc())
+            .limit(settings.CHAT_HISTORY_LIMIT)
+            .all()
+        )
+        recent = list(reversed(recent))
+        history = [{"role": m.role, "content": m.content} for m in recent]
+
+        # keep only true follow-ups
+        if not is_follow_up(question, history):
+            history = []
+
+    # ---------- Fix 2: better retrieval text for checklist steps ----------
+    search_question = question
+    if is_checklist_step:
+        # "Help me complete this onboarding step: Submit Bank & Payroll Details"
+        search_question = question.split(":", 1)[1].strip()
 
     try:
-        result = ask_question(data.question, history=history)
+        result = ask_question(
+            question=question,
+            history=history,
+            search_question=search_question
+        )
     except Exception as e:
         raise HTTPException(
             status_code=500,
             detail=f"Failed to generate answer: {str(e)}"
         )
 
-    db.add(ChatMessage(user_id=current_user.id, role="user", content=data.question))
+    db.add(ChatMessage(user_id=current_user.id, role="user", content=question))
     db.add(ChatMessage(user_id=current_user.id, role="assistant", content=result["answer"]))
     db.commit()
 

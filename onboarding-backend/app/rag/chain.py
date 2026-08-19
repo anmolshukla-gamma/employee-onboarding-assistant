@@ -1,10 +1,17 @@
 from app.rag.llm import get_llm
 from app.rag.vectorstore import search_similar_chunks
 
-def ask_question(question: str, history: list | None = None) -> dict:
+
+def ask_question(
+    question: str,
+    history: list | None = None,
+    search_question: str | None = None
+) -> dict:
     history = history or []
 
-    docs = search_similar_chunks(question, k=4)
+    # Fix 2: retrieve using focused query when provided
+    retrieval_query = (search_question or question).strip()
+    docs = search_similar_chunks(retrieval_query, k=4)
 
     if not docs:
         return {
@@ -43,10 +50,12 @@ Preferred structure:
 2. Numbered steps
 3. Optional short section for issues/contact
 
-Important:
-- If the user asks a new independent question, do not continue the previous topic.
-- Only use chat history for true follow-ups referring to previous answers.
-- Prioritize the current question + retrieved context.
+Conversation rules:
+- Prioritize the current question and retrieved context.
+- Use recent conversation only for true follow-ups that refer to the previous answer.
+- If the current question introduces a different topic, completely ignore the recent conversation.
+- If the question names a specific onboarding step, answer ONLY that step.
+- Do not answer a different checklist step.
 
 Context:
 {context}
