@@ -16,7 +16,10 @@ class CommentReview(BaseModel):
 class CommentResponse(BaseModel):
     id: int
     checklist_item_id: int
+    checklist_item_title: Optional[str] = None
     user_id: int
+    user_name: Optional[str] = None
+    user_email: Optional[str] = None
     comment: str
     comment_type: str
     status: str

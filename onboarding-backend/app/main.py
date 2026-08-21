@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base
 from app.models import user, role, checklist, document,chat
@@ -6,6 +6,15 @@ from app.routers import auth,role,checklist,document,chat,admin,access
 from app.models.chat import ChatMessage
 from app.models.team import Team, Tool, TeamTool, UserTeam
 from app.models.comment import ChecklistComment
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
+limiter = Limiter(key_func=get_remote_address)
+
+
+
+
 
 # Create's all tables
 Base.metadata.create_all(bind=engine)
@@ -15,6 +24,9 @@ app = FastAPI(
     description="AI-powered Onboarding & Knowledge Buddy",
     version="1.0.0"
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Allow's frontend to call APIs
 app.add_middleware(

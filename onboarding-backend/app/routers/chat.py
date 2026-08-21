@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
@@ -12,6 +12,11 @@ from app.core.dependencies import get_current_user, get_current_admin
 from app.config import settings
 from app.rag.process import process_document
 from app.rag.chain import ask_question
+from slowapi.util import get_remote_address
+from slowapi import Limiter
+
+
+limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter(prefix="/ai", tags=["AI / RAG"])
 
@@ -92,7 +97,9 @@ def is_follow_up(question: str, history: list[dict]) -> bool:
 
 
 @router.post("/ask", response_model=QuestionResponse)
+@limiter.limit("20/minute")
 def ask_ai_question(
+    request: Request,
     data: QuestionRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -102,7 +109,7 @@ def ask_ai_question(
 
     question = data.question.strip()
 
-    # ---------- Fix 1: checklist step questions ignore history ----------
+
     is_checklist_step = question.lower().startswith(
         "help me complete this onboarding step:"
     )
@@ -127,7 +134,7 @@ def ask_ai_question(
         if not is_follow_up(question, history):
             history = []
 
-    # ---------- Fix 2: better retrieval text for checklist steps ----------
+
     search_question = question
     if is_checklist_step:
         # "Help me complete this onboarding step: Submit Bank & Payroll Details"

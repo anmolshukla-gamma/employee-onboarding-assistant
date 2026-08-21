@@ -100,3 +100,20 @@ class MyAccessResponse(BaseModel):
     team_id: Optional[int] = None
     team_name: Optional[str] = None
     tools: List[MyAccessItem] = []
+
+
+class TeamMemberResponse(BaseModel):
+    user_id: int
+    full_name: str
+    email: str
+    role_id: Optional[int] = None
+    role_name: Optional[str] = None
+    is_admin: bool
+    is_active: bool
+
+    class Config:
+        from_attributes = True
+
+
+class AddTeamMemberRequest(BaseModel):
+    user_id: int

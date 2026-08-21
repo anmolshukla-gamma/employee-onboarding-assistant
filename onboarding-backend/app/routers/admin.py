@@ -25,25 +25,109 @@ from app.core.dependencies import get_current_admin
 from app.models.role import Role
 from app.models.checklist import Checklist, ChecklistItem, UserProgress
 from app.models.team import UserTeam, Team
-from app.schemas.admin import UserProgressSummary, UserProgressDetail, UserProgressItem,AdminUserCreate
+from app.schemas.admin import UserProgressSummary, UserProgressDetail, UserProgressItem,AdminUserCreate,UserListItem
 
 from datetime import datetime
 from app.models.comment import ChecklistComment
 from app.schemas.comment import CommentResponse, CommentReview
+from app.schemas.admin import UserListItem
+from app.schemas.team import TeamMemberResponse, AddTeamMemberRequest
+from app.schemas.admin import UserRoleAssign
 
 
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
-# -------------------- Users --------------------
 
-@router.get("/users", response_model=List[UserAdminResponse])
+def get_user_progress_numbers(db: Session, user: User):
+    total = 0
+    completed = 0
+
+    if not user.role_id:
+        return total, completed, 0.0
+
+    checklist = db.query(Checklist).filter(Checklist.role_id == user.role_id).first()
+    if not checklist:
+        return total, completed, 0.0
+
+    items = db.query(ChecklistItem).filter(ChecklistItem.checklist_id == checklist.id).all()
+    total = len(items)
+    item_ids = [i.id for i in items]
+
+    if item_ids:
+        completed = db.query(UserProgress).filter(
+            UserProgress.user_id == user.id,
+            UserProgress.checklist_item_id.in_(item_ids),
+            UserProgress.is_completed == True
+        ).count()
+
+    percent = round((completed / total) * 100, 1) if total > 0 else 0.0
+    return total, completed, percent
+
+
+
+# -------------------- Users --------------------
+@router.get("/users", response_model=List[UserListItem])
 def get_all_users(
+    q: str | None = None,
+    role_id: int | None = None,
+    team_id: int | None = None,
+    is_active: bool | None = None,
     current_admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
-    users = db.query(User).order_by(User.created_at.desc()).all()
-    return users
+    query = db.query(User)
+
+    if q:
+        like = f"%{q.strip()}%"
+        query = query.filter(
+            (User.full_name.ilike(like)) | (User.email.ilike(like))
+        )
+
+    if role_id is not None:
+        query = query.filter(User.role_id == role_id)
+
+    if is_active is not None:
+        query = query.filter(User.is_active == is_active)
+
+    users = query.order_by(User.created_at.desc()).all()
+    result = []
+
+    for user in users:
+        role_name = None
+        if user.role_id:
+            role = db.query(Role).filter(Role.id == user.role_id).first()
+            role_name = role.name if role else None
+
+        user_team = db.query(UserTeam).filter(UserTeam.user_id == user.id).first()
+        user_team_id = user_team.team_id if user_team else None
+        team_name = None
+
+        if user_team_id:
+            team = db.query(Team).filter(Team.id == user_team_id).first()
+            team_name = team.name if team else None
+
+        if team_id is not None and user_team_id != team_id:
+            continue
+
+        total, completed, percent = get_user_progress_numbers(db, user)
+
+        result.append(UserListItem(
+            id=user.id,
+            full_name=user.full_name,
+            email=user.email,
+            role_id=user.role_id,
+            role_name=role_name,
+            team_id=user_team_id,
+            team_name=team_name,
+            is_admin=user.is_admin,
+            is_active=user.is_active,
+            progress_percent=percent,
+            total_items=total,
+            completed_items=completed
+        ))
+
+    return result
 
 @router.get("/users/{user_id}", response_model=UserAdminResponse)
 def get_user(
@@ -104,7 +188,79 @@ def get_admin_stats(
     active_users = db.query(User).filter(User.is_active == True).count()
     total_documents = db.query(Document).count()
     ready_documents = db.query(Document).filter(Document.status == "ready").count()
+    unready_documents = total_documents - ready_documents
     total_roles = db.query(Role).count()
+    total_teams = db.query(Team).count()
+    total_tools = db.query(Tool).count()
+    pending_comments = db.query(ChecklistComment).filter(
+        ChecklistComment.status == "pending"
+    ).count()
+
+    users = db.query(User).all()
+    users_without_team = 0
+    progress_values = []
+    lagging_users_all = []
+    users_completed = 0
+
+    for user in users:
+        has_team = db.query(UserTeam).filter(UserTeam.user_id == user.id).first()
+        if not has_team:
+            users_without_team += 1
+
+        total = 0
+        completed = 0
+        if user.role_id:
+            checklist = db.query(Checklist).filter(Checklist.role_id == user.role_id).first()
+            if checklist:
+                items = db.query(ChecklistItem).filter(
+                    ChecklistItem.checklist_id == checklist.id
+                ).all()
+                total = len(items)
+                item_ids = [i.id for i in items]
+                if item_ids:
+                    completed = db.query(UserProgress).filter(
+                        UserProgress.user_id == user.id,
+                        UserProgress.checklist_item_id.in_(item_ids),
+                        UserProgress.is_completed == True
+                    ).count()
+
+        percent = round((completed / total) * 100, 1) if total > 0 else 0.0
+        progress_values.append(percent)
+
+        if total > 0 and percent >= 100.0:
+            users_completed += 1
+
+        if total > 0 and percent < 50.0:
+            lagging_users_all.append({
+                "user_id": user.id,
+                "full_name": user.full_name,
+                "email": user.email,
+                "progress_percent": percent,
+                "completed_items": completed,
+                "total_items": total
+            })
+
+    average_progress = round(sum(progress_values) / len(progress_values), 1) if progress_values else 0.0
+    lagging_users = sorted(lagging_users_all, key=lambda x: x["progress_percent"])[:5]
+
+    pending_rows = (
+        db.query(ChecklistComment)
+        .filter(ChecklistComment.status == "pending")
+        .order_by(ChecklistComment.created_at.desc())
+        .limit(5)
+        .all()
+    )
+    pending_feedback = []
+    for row in pending_rows:
+        user = db.query(User).filter(User.id == row.user_id).first()
+        item = db.query(ChecklistItem).filter(ChecklistItem.id == row.checklist_item_id).first()
+        pending_feedback.append({
+            "id": row.id,
+            "comment": row.comment,
+            "comment_type": row.comment_type,
+            "user_name": user.full_name if user else None,
+            "checklist_item_title": item.title if item else None
+        })
 
     return {
         "total_users": total_users,
@@ -112,7 +268,17 @@ def get_admin_stats(
         "active_users": active_users,
         "total_documents": total_documents,
         "ready_documents": ready_documents,
-        "total_roles": total_roles
+        "unready_documents": unready_documents,
+        "total_roles": total_roles,
+        "total_teams": total_teams,
+        "total_tools": total_tools,
+        "pending_comments": pending_comments,
+        "users_without_team": users_without_team,
+        "users_completed": users_completed,
+        "users_lagging": len(lagging_users_all),
+        "average_progress": average_progress,
+        "lagging_users": lagging_users,
+        "pending_feedback": pending_feedback
     }
 
 # ====================== ROLES ======================
@@ -573,8 +739,15 @@ def add_tool_to_team(
     db.add(row)
     db.commit()
     db.refresh(row)
-    return row
 
+    return {
+        "id": row.id,
+        "team_id": row.team_id,
+        "tool_id": row.tool_id,
+        "is_mandatory": row.is_mandatory,
+        "order": row.order,
+        "tool": tool
+    }
 
 @router.get("/teams/{team_id}/tools", response_model=List[TeamToolResponse])
 def list_team_tools(
@@ -586,9 +759,25 @@ def list_team_tools(
     if not team:
         raise HTTPException(status_code=404, detail="Team not found")
 
-    return db.query(TeamTool).filter(
-        TeamTool.team_id == team_id
-    ).order_by(TeamTool.order).all()
+    rows = (
+        db.query(TeamTool, Tool)
+        .join(Tool, Tool.id == TeamTool.tool_id)
+        .filter(TeamTool.team_id == team_id)
+        .order_by(TeamTool.order.asc())
+        .all()
+    )
+
+    result = []
+    for team_tool, tool in rows:
+        result.append({
+            "id": team_tool.id,
+            "team_id": team_tool.team_id,
+            "tool_id": team_tool.tool_id,
+            "is_mandatory": team_tool.is_mandatory,
+            "order": team_tool.order,
+            "tool": tool
+        })
+    return result
 
 
 @router.delete("/teams/{team_id}/tools/{tool_id}")
@@ -827,7 +1016,31 @@ def list_comments(
     q = db.query(ChecklistComment)
     if status:
         q = q.filter(ChecklistComment.status == status)
-    return q.order_by(ChecklistComment.created_at.desc()).all()
+
+    rows = q.order_by(ChecklistComment.created_at.desc()).all()
+    result = []
+
+    for row in rows:
+        user = db.query(User).filter(User.id == row.user_id).first()
+        item = db.query(ChecklistItem).filter(ChecklistItem.id == row.checklist_item_id).first()
+
+        result.append({
+            "id": row.id,
+            "checklist_item_id": row.checklist_item_id,
+            "checklist_item_title": item.title if item else None,
+            "user_id": row.user_id,
+            "user_name": user.full_name if user else None,
+            "user_email": user.email if user else None,
+            "comment": row.comment,
+            "comment_type": row.comment_type,
+            "status": row.status,
+            "admin_response": row.admin_response,
+            "reviewed_by": row.reviewed_by,
+            "created_at": row.created_at,
+            "reviewed_at": row.reviewed_at,
+        })
+
+    return result
 
 
 @router.patch("/comments/{comment_id}", response_model=CommentResponse)
@@ -852,4 +1065,137 @@ def review_comment(
 
     db.commit()
     db.refresh(row)
-    return row
+
+    user = db.query(User).filter(User.id == row.user_id).first()
+    item = db.query(ChecklistItem).filter(ChecklistItem.id == row.checklist_item_id).first()
+
+    return {
+        "id": row.id,
+        "checklist_item_id": row.checklist_item_id,
+        "checklist_item_title": item.title if item else None,
+        "user_id": row.user_id,
+        "user_name": user.full_name if user else None,
+        "user_email": user.email if user else None,
+        "comment": row.comment,
+        "comment_type": row.comment_type,
+        "status": row.status,
+        "admin_response": row.admin_response,
+        "reviewed_by": row.reviewed_by,
+        "created_at": row.created_at,
+        "reviewed_at": row.reviewed_at,
+    }
+
+@router.get("/teams/{team_id}/members", response_model=List[TeamMemberResponse])
+def list_team_members(
+    team_id: int,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    team = db.query(Team).filter(Team.id == team_id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    rows = (
+        db.query(User, UserTeam)
+        .join(UserTeam, UserTeam.user_id == User.id)
+        .filter(UserTeam.team_id == team_id)
+        .order_by(User.full_name.asc())
+        .all()
+    )
+
+    result = []
+    for user, _ in rows:
+        role_name = None
+        if user.role_id:
+            role = db.query(Role).filter(Role.id == user.role_id).first()
+            role_name = role.name if role else None
+
+        result.append(TeamMemberResponse(
+            user_id=user.id,
+            full_name=user.full_name,
+            email=user.email,
+            role_id=user.role_id,
+            role_name=role_name,
+            is_admin=user.is_admin,
+            is_active=user.is_active
+        ))
+
+    return result
+
+
+@router.post("/teams/{team_id}/members", status_code=201)
+def add_team_member(
+    team_id: int,
+    data: AddTeamMemberRequest,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    team = db.query(Team).filter(Team.id == team_id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    user = db.query(User).filter(User.id == data.user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    existing = db.query(UserTeam).filter(UserTeam.user_id == user.id).first()
+    if existing:
+        existing.team_id = team_id
+    else:
+        db.add(UserTeam(user_id=user.id, team_id=team_id))
+
+    db.commit()
+    return {
+        "message": "User added to team successfully",
+        "user_id": user.id,
+        "team_id": team_id
+    }
+
+
+@router.delete("/teams/{team_id}/members/{user_id}")
+def remove_team_member(
+    team_id: int,
+    user_id: int,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    row = db.query(UserTeam).filter(
+        UserTeam.team_id == team_id,
+        UserTeam.user_id == user_id
+    ).first()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="User is not a member of this team")
+
+    db.delete(row)
+    db.commit()
+    return {"message": "User removed from team successfully"}
+
+@router.patch("/users/{user_id}/role")
+def assign_user_role(
+    user_id: int,
+    data: UserRoleAssign,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    role = db.query(Role).filter(Role.id == data.role_id).first()
+    if not role:
+        raise HTTPException(status_code=404, detail="Role not found")
+
+    if not role.is_active:
+        raise HTTPException(status_code=400, detail="Cannot assign inactive role")
+
+    user.role_id = data.role_id
+    db.commit()
+    db.refresh(user)
+
+    return {
+        "message": "User role updated successfully",
+        "user_id": user.id,
+        "role_id": user.role_id,
+        "role_name": role.name
+    }
