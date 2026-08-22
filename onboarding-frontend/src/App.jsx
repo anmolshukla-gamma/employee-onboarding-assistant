@@ -10,6 +10,7 @@ import Register from "./pages/Register";
 import RoleSelect from "./pages/RoleSelect";
 import Checklist from "./pages/Checklist";
 import Chat from "./pages/Chat";
+import MyAccess from "./pages/MyAccess";
 import NotFound from "./pages/NotFound";
 
 import AdminDashboard from "./pages/admin/Dashboard";
@@ -18,6 +19,12 @@ import AdminRoles from "./pages/admin/Roles";
 import AdminRoleChecklists from "./pages/admin/RoleChecklists";
 import AdminChecklistItems from "./pages/admin/ChecklistItems";
 import AdminDocuments from "./pages/admin/Documents";
+import AdminTeams from "./pages/admin/Teams";
+import AdminTeamDetail from "./pages/admin/TeamDetail";
+import AdminTools from "./pages/admin/Tools";
+import AdminProgress from "./pages/admin/Progress";
+import AdminProgressDetail from "./pages/admin/ProgressDetail";
+import AdminComments from "./pages/admin/Comments";
 
 export default function App() {
   return (
@@ -41,6 +48,7 @@ export default function App() {
               <Route element={<ProtectedRoute />}>
                 <Route element={<Layout />}>
                   <Route path="/checklist" element={<Checklist />} />
+                  <Route path="/access" element={<MyAccess />} />
                   <Route path="/chat" element={<Chat />} />
   
                   <Route element={<AdminRoute />}>
@@ -50,6 +58,12 @@ export default function App() {
                     <Route path="/admin/roles/:roleId/checklists" element={<AdminRoleChecklists />} />
                     <Route path="/admin/checklists/:checklistId/items" element={<AdminChecklistItems />} />
                     <Route path="/admin/documents" element={<AdminDocuments />} />
+                    <Route path="/admin/teams" element={<AdminTeams />} />
+                    <Route path="/admin/teams/:teamId" element={<AdminTeamDetail />} />
+                    <Route path="/admin/tools" element={<AdminTools />} />
+                    <Route path="/admin/progress" element={<AdminProgress />} />
+                    <Route path="/admin/progress/:userId" element={<AdminProgressDetail />} />
+                    <Route path="/admin/comments" element={<AdminComments />} />
                   </Route>
                 </Route>
               </Route>

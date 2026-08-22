@@ -10,21 +10,33 @@ import {
   IconDocuments,
   IconLogout,
   IconMenu,
+  IconKey,
+  IconLayers,
+  IconWrench,
+  IconBarChart,
+  IconMessageSquare,
 } from "./Icons";
 
 const PAGE_TITLES = {
   "/checklist": "My checklist",
+  "/access": "My Access",
   "/chat": "AI Assistant",
   "/admin": "Admin dashboard",
   "/admin/users": "Manage users",
   "/admin/roles": "Manage roles",
   "/admin/documents": "Manage documents",
+  "/admin/teams": "Manage teams",
+  "/admin/tools": "Manage tools",
+  "/admin/progress": "User progress",
+  "/admin/comments": "Checklist feedback",
 };
 
 function titleFor(pathname) {
   if (PAGE_TITLES[pathname]) return PAGE_TITLES[pathname];
   if (pathname.includes("/checklists")) return "Role checklists";
   if (pathname.includes("/items")) return "Checklist items";
+  if (pathname.includes("/admin/teams/")) return "Team detail";
+  if (pathname.includes("/admin/progress/")) return "User progress detail";
   return "Onboarding Buddy";
 }
 
@@ -57,6 +69,9 @@ export default function Layout() {
           <NavLink to="/checklist" className={({ isActive }) => `sidebar-link ${isActive ? "active" : ""}`} onClick={closeMobile}>
             <IconChecklist /> Checklist
           </NavLink>
+          <NavLink to="/access" className={({ isActive }) => `sidebar-link ${isActive ? "active" : ""}`} onClick={closeMobile}>
+            <IconKey /> My Access
+          </NavLink>
           <NavLink to="/chat" className={({ isActive }) => `sidebar-link ${isActive ? "active" : ""}`} onClick={closeMobile}>
             <IconChat /> AI Assistant
           </NavLink>
@@ -73,8 +88,20 @@ export default function Layout() {
               <NavLink to="/admin/roles" className={({ isActive }) => `sidebar-link ${isActive ? "active" : ""}`} onClick={closeMobile}>
                 <IconRoles /> Roles
               </NavLink>
+              <NavLink to="/admin/teams" className={({ isActive }) => `sidebar-link ${isActive ? "active" : ""}`} onClick={closeMobile}>
+                <IconLayers /> Teams
+              </NavLink>
+              <NavLink to="/admin/tools" className={({ isActive }) => `sidebar-link ${isActive ? "active" : ""}`} onClick={closeMobile}>
+                <IconWrench /> Tools
+              </NavLink>
               <NavLink to="/admin/documents" className={({ isActive }) => `sidebar-link ${isActive ? "active" : ""}`} onClick={closeMobile}>
                 <IconDocuments /> Documents
+              </NavLink>
+              {/* <NavLink to="/admin/progress" className={({ isActive }) => `sidebar-link ${isActive ? "active" : ""}`} onClick={closeMobile}>
+                <IconBarChart /> Progress
+              </NavLink> */}
+              <NavLink to="/admin/comments" className={({ isActive }) => `sidebar-link ${isActive ? "active" : ""}`} onClick={closeMobile}>
+                <IconMessageSquare /> Feedback
               </NavLink>
             </>
           )}

@@ -27,6 +27,10 @@ api.interceptors.response.use(
 );
 
 export function extractErrorMessage(error, fallback = "Something went wrong. Please try again.") {
+  if (error?.response?.status === 429) {
+    return "Too many requests. Please wait a minute and try again.";
+  }
+  
   const detail = error?.response?.data?.detail;
   if (typeof detail === "string") return detail;
   if (Array.isArray(detail) && detail.length) {

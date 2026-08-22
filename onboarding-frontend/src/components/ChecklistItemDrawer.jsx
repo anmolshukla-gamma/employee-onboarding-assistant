@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import LoadingButton from "./LoadingButton";
+import ChecklistItemComments from "./ChecklistItemComments";
 import { IconClose, IconExternalLink, IconFileText, IconChat } from "./Icons";
 
 /** Safely normalize the resources field: handles null, undefined, and malformed entries. */
@@ -101,6 +102,8 @@ export default function ChecklistItemDrawer({ item, open, onClose, onComplete, c
               <p className="text-muted" style={{ fontSize: 13 }}>No resources added yet.</p>
             )}
           </div>
+
+          <ChecklistItemComments itemId={item.id} open={open} />
         </div>
 
         <div className="drawer-footer">

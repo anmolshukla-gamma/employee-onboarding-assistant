@@ -1,74 +1,181 @@
 import { useEffect, useState } from "react";
-import { fetchAdminUsers, toggleUserAdmin, toggleUserActive } from "../../api/admin";
+import {
+  fetchAdminUsers,
+  fetchAdminRoles,
+  fetchAdminTeams,
+  createAdminUser,
+} from "../../api/admin";
 import { extractErrorMessage } from "../../api/axios";
 import { useToast } from "../../context/ToastContext";
 import { useAuth } from "../../context/AuthContext";
-import { PageLoading } from "../../components/Modal";
+import { PageLoading, Modal } from "../../components/Modal";
 import EmptyState from "../../components/EmptyState";
 import StatusBadge from "../../components/StatusBadge";
+import ProgressBar from "../../components/ProgressBar";
+import LoadingButton from "../../components/LoadingButton";
+import { IconPlus } from "../../components/Icons";
+import UserManageDrawer from "./UserManageDrawer";
+
+const EMPTY_CREATE_FORM = {
+  email: "", full_name: "", password: "", role_id: "", team_id: "", is_admin: false, is_active: true,
+};
 
 export default function Users() {
   const toast = useToast();
   const { user: currentUser } = useAuth();
+
   const [users, setUsers] = useState([]);
+  const [roles, setRoles] = useState([]);
+  const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [busyId, setBusyId] = useState(null);
 
-  function load() {
+  // Search + filters
+  const [searchInput, setSearchInput] = useState("");
+  const [q, setQ] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
+  const [teamFilter, setTeamFilter] = useState("");
+  const [activeFilter, setActiveFilter] = useState("");
+
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createForm, setCreateForm] = useState(EMPTY_CREATE_FORM);
+  const [creating, setCreating] = useState(false);
+
+  const [manageUser, setManageUser] = useState(null);
+
+  // Debounce free-text search so we don't hit the backend on every keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setQ(searchInput.trim()), 350);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  function loadUsers() {
     setLoading(true);
-    fetchAdminUsers()
+    fetchAdminUsers({
+      q: q || undefined,
+      role_id: roleFilter || undefined,
+      team_id: teamFilter || undefined,
+      is_active: activeFilter || undefined,
+    })
       .then(({ data }) => setUsers(Array.isArray(data) ? data : data?.items || []))
       .catch((err) => setError(extractErrorMessage(err, "Could not load users.")))
       .finally(() => setLoading(false));
   }
 
-  useEffect(load, []);
+  // Load roles/teams once for filter dropdowns and the drawer's team picker.
+  useEffect(() => {
+    Promise.all([fetchAdminRoles(), fetchAdminTeams()])
+      .then(([rolesRes, teamsRes]) => {
+        setRoles(Array.isArray(rolesRes.data) ? rolesRes.data : []);
+        setTeams(Array.isArray(teamsRes.data) ? teamsRes.data : []);
+      })
+      .catch(() => {
+        /* filters/drawer team picker just show fewer options if this fails */
+      });
+  }, []);
 
-  async function handleToggleAdmin(u) {
-    setBusyId(u.id);
+  useEffect(loadUsers, [q, roleFilter, teamFilter, activeFilter]);
+
+  function updateUserRow(userId, patch) {
+    setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, ...patch } : u)));
+    setManageUser((prev) => (prev && prev.id === userId ? { ...prev, ...patch } : prev));
+  }
+
+  function openCreate() {
+    setCreateForm(EMPTY_CREATE_FORM);
+    setCreateOpen(true);
+  }
+
+  async function handleCreate(e) {
+    e.preventDefault();
+    setCreating(true);
     try {
-      await toggleUserAdmin(u.id);
-      setUsers((prev) => prev.map((x) => (x.id === u.id ? { ...x, is_admin: !x.is_admin } : x)));
-      toast.success(`${u.full_name} is ${!u.is_admin ? "now an admin" : "no longer an admin"}.`);
+      await createAdminUser({
+        email: createForm.email,
+        full_name: createForm.full_name,
+        password: createForm.password,
+        role_id: createForm.role_id ? Number(createForm.role_id) : null,
+        team_id: createForm.team_id ? Number(createForm.team_id) : null,
+        is_admin: createForm.is_admin,
+        is_active: createForm.is_active,
+      });
+      toast.success("User created.");
+      setCreateOpen(false);
+      loadUsers();
     } catch (err) {
-      toast.error(extractErrorMessage(err, "Could not update admin status."));
+      toast.error(extractErrorMessage(err, "Could not create this user."));
     } finally {
-      setBusyId(null);
+      setCreating(false);
     }
   }
 
-  async function handleToggleActive(u) {
-    if (u.id === currentUser?.id) {
-      toast.error("You can't deactivate your own account.");
-      return;
-    }
-    setBusyId(u.id);
-    try {
-      await toggleUserActive(u.id);
-      setUsers((prev) => prev.map((x) => (x.id === u.id ? { ...x, is_active: !x.is_active } : x)));
-      toast.success(`${u.full_name} is now ${!u.is_active ? "active" : "inactive"}.`);
-    } catch (err) {
-      toast.error(extractErrorMessage(err, "Could not update user status."));
-    } finally {
-      setBusyId(null);
-    }
-  }
+  const hasActiveFilters = q || roleFilter || teamFilter || activeFilter;
 
-  if (loading) return <PageLoading />;
+  if (loading && users.length === 0 && !hasActiveFilters) return <PageLoading />;
 
   return (
     <div>
-      <div className="section-head">
-        <h1>Users</h1>
-        <p>Manage admin access and account status for everyone in the org.</p>
+      <div className="flex-between" style={{ marginBottom: 18 }}>
+        <div className="section-head" style={{ marginBottom: 0 }}>
+          <h1>Users</h1>
+          <p>Search, review progress, and manage team/admin/status for everyone in the org.</p>
+        </div>
+        <button className="btn btn-primary" onClick={openCreate}>
+          <IconPlus width={15} height={15} /> New user
+        </button>
+      </div>
+
+      <div className="card card-pad" style={{ marginBottom: 18 }}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <input
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Search by name or email…"
+            style={{
+              flex: "1 1 220px", padding: "9px 12px", border: "1px solid var(--color-border-strong)",
+              borderRadius: "var(--radius-sm)", fontSize: 13.5,
+            }}
+          />
+          <select
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+            style={{ padding: "9px 10px", border: "1px solid var(--color-border-strong)", borderRadius: "var(--radius-sm)", fontSize: 13 }}
+          >
+            <option value="">All roles</option>
+            {roles.map((r) => (
+              <option key={r.id} value={r.id}>{r.name}</option>
+            ))}
+          </select>
+          <select
+            value={teamFilter}
+            onChange={(e) => setTeamFilter(e.target.value)}
+            style={{ padding: "9px 10px", border: "1px solid var(--color-border-strong)", borderRadius: "var(--radius-sm)", fontSize: 13 }}
+          >
+            <option value="">All teams</option>
+            {teams.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+          <select
+            value={activeFilter}
+            onChange={(e) => setActiveFilter(e.target.value)}
+            style={{ padding: "9px 10px", border: "1px solid var(--color-border-strong)", borderRadius: "var(--radius-sm)", fontSize: 13 }}
+          >
+            <option value="">Any status</option>
+            <option value="true">Active</option>
+            <option value="false">Inactive</option>
+          </select>
+        </div>
       </div>
 
       {error && <div className="top-align-error">{error}</div>}
 
       <div className="card">
-        {users.length === 0 ? (
-          <EmptyState title="No users yet" description="Users will show up here once people start registering." />
+        {!loading && users.length === 0 ? (
+          <EmptyState
+            title={hasActiveFilters ? "No matching users" : "No users yet"}
+            description={hasActiveFilters ? "Try a different search or clear your filters." : "Users will show up here once people start registering, or create one directly."}
+          />
         ) : (
           <div className="table-wrap">
             <table className="data-table">
@@ -77,8 +184,9 @@ export default function Users() {
                   <th>Name</th>
                   <th>Email</th>
                   <th>Role</th>
-                  <th>Admin</th>
+                  <th>Team</th>
                   <th>Status</th>
+                  <th>Progress</th>
                   <th></th>
                 </tr>
               </thead>
@@ -88,34 +196,24 @@ export default function Users() {
                     <td className="cell-name">
                       {u.full_name}
                       {u.id === currentUser?.id && <span className="cell-muted"> (you)</span>}
+                      {u.is_admin && <span className="status-badge status-admin" style={{ marginLeft: 6 }}>Admin</span>}
                     </td>
                     <td className="cell-muted">{u.email}</td>
-                    <td className="cell-muted">{u.role_name || u.role_id || "—"}</td>
-                    <td>
-                      <span className={`status-badge ${u.is_admin ? "status-admin" : "status-inactive"}`}>
-                        {u.is_admin ? "Admin" : "Employee"}
-                      </span>
-                    </td>
+                    <td className="cell-muted">{u.role_name || "—"}</td>
+                    <td className="cell-muted">{u.team_name || "—"}</td>
                     <td>
                       <StatusBadge status={u.is_active ? "active" : "inactive"} />
                     </td>
-                    <td>
-                      <div className="row-actions">
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          disabled={busyId === u.id}
-                          onClick={() => handleToggleAdmin(u)}
-                        >
-                          {u.is_admin ? "Revoke admin" : "Make admin"}
-                        </button>
-                        <button
-                          className="btn btn-danger btn-sm"
-                          disabled={busyId === u.id || u.id === currentUser?.id}
-                          onClick={() => handleToggleActive(u)}
-                        >
-                          {u.is_active ? "Deactivate" : "Activate"}
-                        </button>
+                    <td style={{ minWidth: 150 }}>
+                      <div className="cell-muted" style={{ fontSize: 11.5, marginBottom: 4 }}>
+                        {u.completed_items ?? 0}/{u.total_items ?? 0}
                       </div>
+                      <ProgressBar percent={u.progress_percent ?? 0} />
+                    </td>
+                    <td>
+                      <button className="btn btn-secondary btn-sm" onClick={() => setManageUser(u)}>
+                        Manage
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -124,6 +222,104 @@ export default function Users() {
           </div>
         )}
       </div>
+
+      {createOpen && (
+        <Modal title="New user" onClose={() => setCreateOpen(false)} width={480}>
+          <form onSubmit={handleCreate}>
+            <div className="field">
+              <label htmlFor="cu_name">Full name</label>
+              <input
+                id="cu_name"
+                required
+                value={createForm.full_name}
+                onChange={(e) => setCreateForm((f) => ({ ...f, full_name: e.target.value }))}
+                placeholder="Jane Doe"
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="cu_email">Email</label>
+              <input
+                id="cu_email"
+                type="email"
+                required
+                value={createForm.email}
+                onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))}
+                placeholder="jane@company.com"
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="cu_password">Temporary password</label>
+              <input
+                id="cu_password"
+                type="text"
+                required
+                minLength={8}
+                value={createForm.password}
+                onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))}
+                placeholder="Welcome@123"
+              />
+              <div className="field-hint">Share this with the user securely — they can change it after logging in.</div>
+            </div>
+            <div className="grid grid-2" style={{ gap: 12 }}>
+              <div className="field">
+                <label htmlFor="cu_role">Role</label>
+                <select id="cu_role" value={createForm.role_id} onChange={(e) => setCreateForm((f) => ({ ...f, role_id: e.target.value }))}>
+                  <option value="">No role</option>
+                  {roles.map((r) => (
+                    <option key={r.id} value={r.id}>{r.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="cu_team">Team</label>
+                <select id="cu_team" value={createForm.team_id} onChange={(e) => setCreateForm((f) => ({ ...f, team_id: e.target.value }))}>
+                  <option value="">No team</option>
+                  {teams.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 20, marginTop: 4 }}>
+              <div className="checkbox-row">
+                <input
+                  id="cu_admin"
+                  type="checkbox"
+                  checked={createForm.is_admin}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, is_admin: e.target.checked }))}
+                />
+                <label htmlFor="cu_admin" style={{ margin: 0 }}>Admin</label>
+              </div>
+              <div className="checkbox-row">
+                <input
+                  id="cu_active"
+                  type="checkbox"
+                  checked={createForm.is_active}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, is_active: e.target.checked }))}
+                />
+                <label htmlFor="cu_active" style={{ margin: 0 }}>Active</label>
+              </div>
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 22 }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setCreateOpen(false)} disabled={creating}>
+                Cancel
+              </button>
+              <LoadingButton type="submit" loading={creating}>
+                Create user
+              </LoadingButton>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      <UserManageDrawer
+        user={manageUser}
+        teams={teams}
+        open={Boolean(manageUser)}
+        onClose={() => setManageUser(null)}
+        onUserChange={updateUserRow}
+        currentUserId={currentUser?.id}
+      />
     </div>
   );
 }

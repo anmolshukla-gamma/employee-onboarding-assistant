@@ -141,3 +141,41 @@ export const IconBookOpen = (p) => (
     <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
   </svg>
 );
+export const IconKey = (p) => (
+  <svg {...base} {...p}>
+    <circle cx="7.5" cy="15.5" r="5.5" />
+    <path d="M21 2l-9.6 9.6" />
+    <path d="M15.5 7.5L18 10M13 10l2 2" />
+  </svg>
+);
+export const IconMessageSquare = (p) => (
+  <svg {...base} {...p}>
+    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    <path d="M8 9h8M8 13h5" />
+  </svg>
+);
+export const IconBarChart = (p) => (
+  <svg {...base} {...p}>
+    <path d="M3 3v18h18" />
+    <rect x="7" y="12" width="3" height="6" />
+    <rect x="12.5" y="8" width="3" height="10" />
+    <rect x="18" y="5" width="3" height="13" />
+  </svg>
+);
+export const IconLayers = (p) => (
+  <svg {...base} {...p}>
+    <path d="M12 2l9 5-9 5-9-5z" />
+    <path d="M3 12l9 5 9-5" />
+    <path d="M3 17l9 5 9-5" />
+  </svg>
+);
+export const IconWrench = (p) => (
+  <svg {...base} {...p}>
+    <path d="M14.7 6.3a4 4 0 0 1-5.4 5.4L4 17l3 3 5.3-5.3a4 4 0 0 1 5.4-5.4z" />
+  </svg>
+);
+export const IconCheck = (p) => (
+  <svg {...base} {...p}>
+    <path d="M20 6L9 17l-5-5" />
+  </svg>
+);
