@@ -11,6 +11,9 @@ from app.core.dependencies import get_current_user
 from app.config import settings
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from app.schemas.user import UpdateProfileRequest, ChangePasswordRequest
+
+
 
 Limiter = Limiter(key_func=get_remote_address)
 
@@ -68,3 +71,41 @@ def login(
 @router.get("/me", response_model=UserResponse)
 def get_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+
+@router.patch("/me", response_model=UserResponse)
+def update_my_profile(
+    data: UpdateProfileRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    name = data.full_name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Name cannot be empty")
+
+    current_user.full_name = name
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
+@router.post("/change-password")
+def change_my_password(
+    data: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if not verify_password(data.current_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+
+    if data.current_password == data.new_password:
+        raise HTTPException(status_code=400, detail="New password must be different from current password")
+
+    if len(data.new_password.strip()) < 6:
+        raise HTTPException(status_code=400, detail="New password must be at least 6 characters")
+
+    current_user.hashed_password = hash_password(data.new_password)
+    db.commit()
+
+    return {"message": "Password updated successfully"}

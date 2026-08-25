@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { extractErrorMessage } from "../api/axios";
 import LoadingButton from "../components/LoadingButton";
+import { landingPathFor } from "../components/RouteGuards";
 
 export default function Login() {
   const { login } = useAuth();
@@ -22,7 +23,7 @@ export default function Login() {
     try {
       const me = await login({ email, password });
       toast.success("Welcome back!");
-      navigate(me?.role_id ? "/checklist" : "/select-role", { replace: true });
+      navigate(landingPathFor(me), { replace: true });
     } catch (err) {
       setError(extractErrorMessage(err, "Invalid email or password."));
     } finally {

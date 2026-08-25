@@ -147,10 +147,10 @@ export default function Checklist() {
                 className={`check-circle ${item.is_completed ? "checked" : ""}`}
                 onClick={(e) => {
                   e.stopPropagation();
-                  toggleComplete(item);
+                  if (!item.is_completed) setOpenItemId(item.id);
                 }}
-                disabled={item.is_completed || pendingIds.has(item.id)}
-                aria-label={item.is_completed ? "Completed" : "Mark complete"}
+                disabled={item.is_completed}
+                aria-label={item.is_completed ? "Completed" : "Open to mark complete"}
               >
                 {item.is_completed && (
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
@@ -170,11 +170,10 @@ export default function Checklist() {
                   className="btn btn-secondary btn-sm"
                   onClick={(e) => {
                     e.stopPropagation();
-                    toggleComplete(item);
+                    setOpenItemId(item.id);
                   }}
-                  disabled={pendingIds.has(item.id)}
                 >
-                  {pendingIds.has(item.id) ? <span className="spinner spinner-dark" /> : "Mark complete"}
+                  Mark complete
                 </button>
               )}
             </div>

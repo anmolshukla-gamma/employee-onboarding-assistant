@@ -315,6 +315,7 @@ export default function Users() {
       <UserManageDrawer
         user={manageUser}
         teams={teams}
+        roles={roles}
         open={Boolean(manageUser)}
         onClose={() => setManageUser(null)}
         onUserChange={updateUserRow}

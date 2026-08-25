@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { NavLink, Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
   IconChecklist,
@@ -13,14 +13,16 @@ import {
   IconKey,
   IconLayers,
   IconWrench,
-  IconBarChart,
   IconMessageSquare,
+  IconUser,
+  IconChevronDown,
 } from "./Icons";
 
 const PAGE_TITLES = {
   "/checklist": "My checklist",
   "/access": "My Access",
   "/chat": "AI Assistant",
+  "/profile": "My Profile",
   "/admin": "Admin dashboard",
   "/admin/users": "Manage users",
   "/admin/roles": "Manage roles",
@@ -49,9 +51,42 @@ function initials(name) {
 export default function Layout() {
   const { user, isAdmin, logout } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef(null);
 
   const closeMobile = () => setMobileOpen(false);
+
+  // Close the user menu on outside click or Escape.
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    const onPointerDown = (e) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target)) {
+        setUserMenuOpen(false);
+      }
+    };
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") setUserMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [userMenuOpen]);
+
+  // Close the menu whenever the route changes (e.g. after clicking "View Profile").
+  useEffect(() => {
+    setUserMenuOpen(false);
+  }, [location.pathname]);
+
+  const handleLogout = () => {
+    setUserMenuOpen(false);
+    logout();
+    navigate("/login");
+  };
 
   return (
     <div className="app-shell">
@@ -65,18 +100,7 @@ export default function Layout() {
           </div>
         </div>
         <nav className="sidebar-nav">
-          <div className="sidebar-section-label">Workspace</div>
-          <NavLink to="/checklist" className={({ isActive }) => `sidebar-link ${isActive ? "active" : ""}`} onClick={closeMobile}>
-            <IconChecklist /> Checklist
-          </NavLink>
-          <NavLink to="/access" className={({ isActive }) => `sidebar-link ${isActive ? "active" : ""}`} onClick={closeMobile}>
-            <IconKey /> My Access
-          </NavLink>
-          <NavLink to="/chat" className={({ isActive }) => `sidebar-link ${isActive ? "active" : ""}`} onClick={closeMobile}>
-            <IconChat /> AI Assistant
-          </NavLink>
-
-          {isAdmin && (
+          {isAdmin ? (
             <>
               <div className="sidebar-section-label">Admin</div>
               <NavLink to="/admin" end className={({ isActive }) => `sidebar-link ${isActive ? "active" : ""}`} onClick={closeMobile}>
@@ -97,20 +121,25 @@ export default function Layout() {
               <NavLink to="/admin/documents" className={({ isActive }) => `sidebar-link ${isActive ? "active" : ""}`} onClick={closeMobile}>
                 <IconDocuments /> Documents
               </NavLink>
-              {/* <NavLink to="/admin/progress" className={({ isActive }) => `sidebar-link ${isActive ? "active" : ""}`} onClick={closeMobile}>
-                <IconBarChart /> Progress
-              </NavLink> */}
               <NavLink to="/admin/comments" className={({ isActive }) => `sidebar-link ${isActive ? "active" : ""}`} onClick={closeMobile}>
                 <IconMessageSquare /> Feedback
               </NavLink>
             </>
+          ) : (
+            <>
+              <div className="sidebar-section-label">Workspace</div>
+              <NavLink to="/checklist" className={({ isActive }) => `sidebar-link ${isActive ? "active" : ""}`} onClick={closeMobile}>
+                <IconChecklist /> Checklist
+              </NavLink>
+              <NavLink to="/access" className={({ isActive }) => `sidebar-link ${isActive ? "active" : ""}`} onClick={closeMobile}>
+                <IconKey /> My Access
+              </NavLink>
+              <NavLink to="/chat" className={({ isActive }) => `sidebar-link ${isActive ? "active" : ""}`} onClick={closeMobile}>
+                <IconChat /> AI Assistant
+              </NavLink>
+            </>
           )}
         </nav>
-        <div className="sidebar-foot">
-          <button className="sidebar-link" id="logout-btn" style={{ width: "100%" }} onClick={logout}>
-            <IconLogout /> Logout
-          </button>
-        </div>
       </aside>
 
       <div className="main-col">
@@ -121,12 +150,33 @@ export default function Layout() {
             </button>
             <span className="topbar-title">{titleFor(location.pathname)}</span>
           </div>
-          <div className="topbar-user">
-            <div className="topbar-user-meta">
-              <div className="topbar-user-name">{user?.full_name}</div>
-              <div className="topbar-user-role">{isAdmin ? "Administrator" : "Employee"}</div>
-            </div>
-            <div className="avatar">{initials(user?.full_name)}</div>
+          <div className="user-menu" ref={userMenuRef}>
+            <button
+              type="button"
+              className="topbar-user user-menu-trigger"
+              id="user-menu-btn"
+              onClick={() => setUserMenuOpen((v) => !v)}
+              aria-haspopup="true"
+              aria-expanded={userMenuOpen}
+            >
+              <div className="topbar-user-meta">
+                <div className="topbar-user-name">{user?.full_name}</div>
+                <div className="topbar-user-role">{isAdmin ? "Administrator" : "Employee"}</div>
+              </div>
+              <div className="avatar">{initials(user?.full_name)}</div>
+              <IconChevronDown width={14} height={14} className="user-menu-chevron" />
+            </button>
+
+            {userMenuOpen && (
+              <div className="user-menu-dropdown" role="menu">
+                <Link to="/profile" className="user-menu-item" role="menuitem" onClick={() => setUserMenuOpen(false)}>
+                  <IconUser width={15} height={15} /> View Profile
+                </Link>
+                <button type="button" className="user-menu-item user-menu-item-danger" id="logout-btn" role="menuitem" onClick={handleLogout}>
+                  <IconLogout width={15} height={15} /> Logout
+                </button>
+              </div>
+            )}
           </div>
         </header>
         <div className="page-content">

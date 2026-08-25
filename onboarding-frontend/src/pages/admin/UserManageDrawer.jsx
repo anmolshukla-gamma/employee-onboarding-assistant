@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { toggleUserAdmin, toggleUserActive, assignUserTeam, fetchUserProgress } from "../../api/admin";
+import { toggleUserAdmin, toggleUserActive, assignUserTeam, assignUserRole, fetchUserProgress } from "../../api/admin";
 import { extractErrorMessage } from "../../api/axios";
 import { useToast } from "../../context/ToastContext";
 import LoadingButton from "../../components/LoadingButton";
@@ -11,16 +11,19 @@ import { IconClose } from "../../components/Icons";
  * @param {Object} props
  * @param {Object} props.user - the row from the users table (id, full_name, email, role_name, team_id, team_name, is_admin, is_active, ...)
  * @param {Array} props.teams
+ * @param {Array} props.roles
  * @param {boolean} props.open
  * @param {() => void} props.onClose
  * @param {(userId: number, patch: Object) => void} props.onUserChange - called with a partial patch to update the row in the parent table
  * @param {number} [props.currentUserId] - to prevent self-deactivation
  */
-export default function UserManageDrawer({ user, teams, open, onClose, onUserChange, currentUserId }) {
+export default function UserManageDrawer({ user, teams, roles, open, onClose, onUserChange, currentUserId }) {
   const toast = useToast();
 
   const [teamId, setTeamId] = useState(user?.team_id ? String(user.team_id) : "");
   const [savingTeam, setSavingTeam] = useState(false);
+  const [roleId, setRoleId] = useState(user?.role_id ? String(user.role_id) : "");
+  const [savingRole, setSavingRole] = useState(false);
   const [togglingAdmin, setTogglingAdmin] = useState(false);
   const [togglingActive, setTogglingActive] = useState(false);
 
@@ -30,7 +33,8 @@ export default function UserManageDrawer({ user, teams, open, onClose, onUserCha
 
   useEffect(() => {
     setTeamId(user?.team_id ? String(user.team_id) : "");
-  }, [user?.id, user?.team_id]);
+    setRoleId(user?.role_id ? String(user.role_id) : "");
+  }, [user?.id, user?.team_id, user?.role_id]);
 
   useEffect(() => {
     if (!open || !user?.id) return;
@@ -86,6 +90,20 @@ export default function UserManageDrawer({ user, teams, open, onClose, onUserCha
       toast.error(extractErrorMessage(err, "Could not assign this team."));
     } finally {
       setSavingTeam(false);
+    }
+  }
+
+  async function handleSaveRole() {
+    if (!roleId) return;
+    setSavingRole(true);
+    try {
+      const { data } = await assignUserRole(user.id, Number(roleId));
+      onUserChange(user.id, { role_id: data.role_id, role_name: data.role_name });
+      toast.success(`${user.full_name}'s role updated to ${data.role_name || "selected role"}.`);
+    } catch (err) {
+      toast.error(extractErrorMessage(err, "Could not assign this role."));
+    } finally {
+      setSavingRole(false);
     }
   }
 
@@ -158,6 +176,35 @@ export default function UserManageDrawer({ user, teams, open, onClose, onUserCha
           {/* Actions */}
           <div className="drawer-section">
             <h4 className="drawer-section-title">Actions</h4>
+
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ display: "block", fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>
+                Assign / change role
+              </label>
+              <div style={{ display: "flex", gap: 8 }}>
+                <select
+                  value={roleId}
+                  onChange={(e) => setRoleId(e.target.value)}
+                  style={{
+                    flex: 1, padding: "8px 10px", border: "1px solid var(--color-border-strong)",
+                    borderRadius: "var(--radius-sm)", fontSize: 13,
+                  }}
+                >
+                  <option value="">No role</option>
+                  {roles.map((r) => (
+                    <option key={r.id} value={r.id}>{r.name}</option>
+                  ))}
+                </select>
+                <LoadingButton
+                  className="btn btn-secondary btn-sm"
+                  loading={savingRole}
+                  disabled={!roleId || roleId === (user.role_id ? String(user.role_id) : "")}
+                  onClick={handleSaveRole}
+                >
+                  Save
+                </LoadingButton>
+              </div>
+            </div>
 
             <div style={{ marginBottom: 12 }}>
               <label style={{ display: "block", fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>

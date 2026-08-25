@@ -15,5 +15,4 @@ onboarding-frontend/dist/
 
 # IDE
 .vscode/
-.idea/git add .gitignore
-git status
+.idea/

@@ -1,8 +1,9 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider } from "./context/AuthContext";
+import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ToastProvider } from "./context/ToastContext";
 import { ChatProvider } from "./context/ChatContext";
-import { ProtectedRoute, AdminRoute, GuestRoute } from "./components/RouteGuards";
+import { ProtectedRoute, AdminRoute, GuestRoute, landingPathFor } from "./components/RouteGuards";
+import { PageLoading } from "./components/Modal";
 import Layout from "./components/Layout";
 
 import Login from "./pages/Login";
@@ -11,6 +12,7 @@ import RoleSelect from "./pages/RoleSelect";
 import Checklist from "./pages/Checklist";
 import Chat from "./pages/Chat";
 import MyAccess from "./pages/MyAccess";
+import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 
 import AdminDashboard from "./pages/admin/Dashboard";
@@ -25,6 +27,13 @@ import AdminTools from "./pages/admin/Tools";
 import AdminProgress from "./pages/admin/Progress";
 import AdminProgressDetail from "./pages/admin/ProgressDetail";
 import AdminComments from "./pages/admin/Comments";
+
+/** Sends "/" to the right place: login if signed out, /admin for admins, checklist/select-role for employees. */
+function RootRedirect() {
+  const { loading, user } = useAuth();
+  if (loading) return <PageLoading />;
+  return <Navigate to={landingPathFor(user)} replace />;
+}
 
 export default function App() {
   return (
@@ -50,6 +59,7 @@ export default function App() {
                   <Route path="/checklist" element={<Checklist />} />
                   <Route path="/access" element={<MyAccess />} />
                   <Route path="/chat" element={<Chat />} />
+                  <Route path="/profile" element={<Profile />} />
   
                   <Route element={<AdminRoute />}>
                     <Route path="/admin" element={<AdminDashboard />} />
@@ -68,7 +78,7 @@ export default function App() {
                 </Route>
               </Route>
   
-              <Route path="/" element={<Navigate to="/checklist" replace />} />
+              <Route path="/" element={<RootRedirect />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </ChatProvider>

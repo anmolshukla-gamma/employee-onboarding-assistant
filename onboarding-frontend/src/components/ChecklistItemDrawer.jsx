@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import LoadingButton from "./LoadingButton";
 import ChecklistItemComments from "./ChecklistItemComments";
 import { IconClose, IconExternalLink, IconFileText, IconChat } from "./Icons";
@@ -30,20 +30,40 @@ function ResourceIcon({ type }) {
  * @param {(item: import("../types/checklist").ChecklistItem) => void} [props.onAskAi]
  */
 export default function ChecklistItemDrawer({ item, open, onClose, onComplete, completing, onAskAi }) {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmChecked, setConfirmChecked] = useState(false);
+
   // Close on Escape for keyboard users.
   useEffect(() => {
     if (!open) return;
     function onKeyDown(e) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        if (confirmOpen) setConfirmOpen(false);
+        else onClose();
+      }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, onClose]);
+  }, [open, onClose, confirmOpen]);
+
+  // Reset the confirmation state whenever a different item is opened, or
+  // once completion actually finishes, so it doesn't linger stale.
+  useEffect(() => {
+    setConfirmOpen(false);
+    setConfirmChecked(false);
+  }, [item?.id]);
+  useEffect(() => {
+    if (!completing) setConfirmOpen(false);
+  }, [completing]);
 
   if (!open || !item) return null;
 
   const resources = normalizeResources(item.resources);
   const hasGuide = Boolean(item.detailed_guide && item.detailed_guide.trim());
+
+  function handleConfirm() {
+    onComplete(item);
+  }
 
   return (
     <div className="drawer-overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -117,11 +137,46 @@ export default function ChecklistItemDrawer({ item, open, onClose, onComplete, c
             Close
           </button>
           {!item.is_completed && (
-            <LoadingButton loading={completing} onClick={() => onComplete(item)}>
+            <LoadingButton loading={completing} onClick={() => setConfirmOpen(true)}>
               Mark complete
             </LoadingButton>
           )}
         </div>
+
+        {confirmOpen && (
+          <div className="modal-overlay" onMouseDown={(e) => e.target === e.currentTarget && setConfirmOpen(false)}>
+            <div className="modal-card" style={{ maxWidth: 420 }}>
+              <div className="modal-header">
+                <h3>Confirm completion</h3>
+                <button className="btn btn-ghost btn-icon" onClick={() => setConfirmOpen(false)} aria-label="Close">
+                  <IconClose width={16} height={16} />
+                </button>
+              </div>
+              <div className="modal-body">
+                <p style={{ fontSize: 13.5, color: "var(--color-text-muted)", lineHeight: 1.55, marginBottom: 16 }}>
+                  I confirm that I have completed this onboarding step.
+                </p>
+                <label className="checkbox-row" style={{ alignItems: "flex-start", cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={confirmChecked}
+                    onChange={(e) => setConfirmChecked(e.target.checked)}
+                    style={{ marginTop: 2 }}
+                  />
+                  <span>I have completed this task</span>
+                </label>
+              </div>
+              <div className="modal-footer">
+                <button className="btn btn-secondary" onClick={() => setConfirmOpen(false)} disabled={completing}>
+                  Cancel
+                </button>
+                <LoadingButton loading={completing} disabled={!confirmChecked} onClick={handleConfirm}>
+                  Confirm
+                </LoadingButton>
+              </div>
+            </div>
+          </div>
+        )}
       </aside>
     </div>
   );

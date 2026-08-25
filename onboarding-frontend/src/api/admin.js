@@ -55,6 +55,9 @@ export const removeToolFromTeam = (teamId, toolId) => api.delete(`/admin/teams/$
 // ---- Assign user to team ----
 export const assignUserTeam = (userId, teamId) => api.patch(`/admin/users/${userId}/team`, { team_id: teamId });
 
+// ---- Assign user role ----
+export const assignUserRole = (userId, roleId) => api.patch(`/admin/users/${userId}/role`, { role_id: roleId });
+
 // ---- Create user ----
 export const createAdminUser = (payload) => api.post("/admin/users", payload);
 
