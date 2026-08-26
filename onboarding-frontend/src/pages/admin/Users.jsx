@@ -16,6 +16,7 @@ import LoadingButton from "../../components/LoadingButton";
 import Pagination from "../../components/Pagination";
 import { IconPlus } from "../../components/Icons";
 import UserManageDrawer from "./UserManageDrawer";
+import { useNavigate } from "react-router-dom";
 
 const EMPTY_CREATE_FORM = {
   email: "",
@@ -55,6 +56,7 @@ export default function Users() {
   const [creating, setCreating] = useState(false);
 
   const [manageUser, setManageUser] = useState(null);
+  const navigate = useNavigate();
 
   // Debounce free-text search
   useEffect(() => {
@@ -153,8 +155,8 @@ export default function Users() {
           <h1>Users</h1>
           <p>Search, review progress, and manage team/admin/status for everyone in the org.</p>
         </div>
-        <button className="btn btn-primary" onClick={openCreate}>
-          <IconPlus width={15} height={15} /> New user
+        <button className="btn btn-primary" onClick={() => navigate("/admin/users/new")}>
+          + New user
         </button>
       </div>
 

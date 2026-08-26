@@ -6,6 +6,7 @@ import { ProtectedRoute, AdminRoute, GuestRoute, landingPathFor } from "./compon
 import { PageLoading } from "./components/Modal";
 import Layout from "./components/Layout";
 import Landing from "./pages/Landing";
+import CreateUser from "./pages/admin/CreateUser";
 
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -77,6 +78,7 @@ export default function App() {
                     <Route path="/admin/progress" element={<AdminProgress />} />
                     <Route path="/admin/progress/:userId" element={<AdminProgressDetail />} />
                     <Route path="/admin/comments" element={<AdminComments />} />
+                    <Route path="/admin/users/new" element={<CreateUser />} />
                   </Route>
                 </Route>
               </Route>
