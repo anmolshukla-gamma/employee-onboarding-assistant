@@ -28,6 +28,23 @@ const EMPTY_FORM = {
 let resourceKeySeq = 0;
 const newResourceRow = () => ({ _key: ++resourceKeySeq, label: "", url: "", type: "link" });
 
+// The admin API returns `resources` as-is from the DB column, which is stored
+// as a raw JSON string (unlike /checklist/my, which parses it server-side).
+// Normalize both shapes here so the table count and edit form see a real array
+// whether the backend hands back a string, an already-parsed array, or null.
+function normalizeResources(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 export default function ChecklistItems() {
   const { checklistId } = useParams();
   const toast = useToast();
@@ -49,7 +66,8 @@ export default function ChecklistItems() {
     fetchChecklistItems(checklistId)
       .then(({ data }) => {
         const list = Array.isArray(data) ? data : data?.items || [];
-        setItems(list.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
+        const normalized = list.map((item) => ({ ...item, resources: normalizeResources(item.resources) }));
+        setItems(normalized.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
       })
       .catch((err) => setError(extractErrorMessage(err, "Could not load checklist items.")))
       .finally(() => setLoading(false));

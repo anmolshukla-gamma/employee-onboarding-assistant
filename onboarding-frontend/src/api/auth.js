@@ -16,3 +16,11 @@ export function login({ email, password }) {
 export function fetchMe() {
   return api.get("/auth/me");
 }
+
+export function updateProfile({ full_name }) {
+  return api.patch("/auth/me", { full_name });
+}
+
+export function changePassword({ current_password, new_password }) {
+  return api.post("/auth/change-password", { current_password, new_password });
+}

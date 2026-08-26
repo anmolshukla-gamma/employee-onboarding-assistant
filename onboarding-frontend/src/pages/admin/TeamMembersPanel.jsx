@@ -43,8 +43,11 @@ export default function TeamMembersPanel({ teamId, teamName }) {
     try {
       // Pull the full user list and filter out people already on this team
       // client-side — simplest way to reuse the existing users endpoint.
-      const { data } = await fetchAdminUsers({});
-      const users = Array.isArray(data) ? data : [];
+      // /admin/users returns a paginated object ({ items, page, total, ... }),
+      // not a bare array, and defaults to only 20 users per page — request
+      // the max page size so every user is a candidate here.
+      const { data } = await fetchAdminUsers({ page_size: 100 });
+      const users = Array.isArray(data?.items) ? data.items : [];
       setCandidateUsers(users.filter((u) => !memberIds.has(u.id)));
     } catch (err) {
       toast.error(extractErrorMessage(err, "Could not load users to add."));
