@@ -5,6 +5,7 @@ import { ChatProvider } from "./context/ChatContext";
 import { ProtectedRoute, AdminRoute, GuestRoute, landingPathFor } from "./components/RouteGuards";
 import { PageLoading } from "./components/Modal";
 import Layout from "./components/Layout";
+import Landing from "./pages/Landing";
 
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -28,11 +29,13 @@ import AdminProgress from "./pages/admin/Progress";
 import AdminProgressDetail from "./pages/admin/ProgressDetail";
 import AdminComments from "./pages/admin/Comments";
 
-/** Sends "/" to the right place: login if signed out, /admin for admins, checklist/select-role for employees. */
-function RootRedirect() {
-  const { loading, user } = useAuth();
+/** "/" shows the public landing page to signed-out visitors, and sends
+ *  signed-in users straight to their dashboard (admin / checklist / select-role). */
+function RootRoute() {
+  const { loading, isAuthenticated, user } = useAuth();
   if (loading) return <PageLoading />;
-  return <Navigate to={landingPathFor(user)} replace />;
+  if (isAuthenticated) return <Navigate to={landingPathFor(user)} replace />;
+  return <Landing />;
 }
 
 export default function App() {
@@ -78,7 +81,7 @@ export default function App() {
                 </Route>
               </Route>
   
-              <Route path="/" element={<RootRedirect />} />
+              <Route path="/" element={<RootRoute />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </ChatProvider>

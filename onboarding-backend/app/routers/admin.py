@@ -33,10 +33,26 @@ from app.schemas.comment import CommentResponse, CommentReview
 from app.schemas.admin import UserListItem
 from app.schemas.team import TeamMemberResponse, AddTeamMemberRequest
 from app.schemas.admin import UserRoleAssign
+import math
 
 
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
+
+
+def paginate(query, page: int, page_size: int):
+    page = max(page, 1)
+    page_size = min(max(page_size, 1), 100)
+
+    total = query.count()
+    items = (
+        query.offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    total_pages = math.ceil(total / page_size) if total else 0
+
+    return items, page, page_size, total, total_pages
 
 
 def get_user_progress_numbers(db: Session, user: User):
@@ -67,12 +83,14 @@ def get_user_progress_numbers(db: Session, user: User):
 
 
 # -------------------- Users --------------------
-@router.get("/users", response_model=List[UserListItem])
+@router.get("/users")
 def get_all_users(
     q: str | None = None,
     role_id: int | None = None,
     team_id: int | None = None,
     is_active: bool | None = None,
+    page: int = 1,
+    page_size: int = 20,
     current_admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
@@ -90,9 +108,16 @@ def get_all_users(
     if is_active is not None:
         query = query.filter(User.is_active == is_active)
 
-    users = query.order_by(User.created_at.desc()).all()
-    result = []
+    # team filter needs post-process OR join; keep simple join if needed
+    query = query.order_by(User.created_at.desc())
 
+    # if team_id filter requested, join user_teams
+    if team_id is not None:
+        query = query.join(UserTeam, UserTeam.user_id == User.id).filter(UserTeam.team_id == team_id)
+
+    users, page, page_size, total, total_pages = paginate(query, page, page_size)
+
+    result = []
     for user in users:
         role_name = None
         if user.role_id:
@@ -102,32 +127,34 @@ def get_all_users(
         user_team = db.query(UserTeam).filter(UserTeam.user_id == user.id).first()
         user_team_id = user_team.team_id if user_team else None
         team_name = None
-
         if user_team_id:
             team = db.query(Team).filter(Team.id == user_team_id).first()
             team_name = team.name if team else None
 
-        if team_id is not None and user_team_id != team_id:
-            continue
+        total_items, completed_items, percent = get_user_progress_numbers(db, user)
 
-        total, completed, percent = get_user_progress_numbers(db, user)
+        result.append({
+            "id": user.id,
+            "full_name": user.full_name,
+            "email": user.email,
+            "role_id": user.role_id,
+            "role_name": role_name,
+            "team_id": user_team_id,
+            "team_name": team_name,
+            "is_admin": user.is_admin,
+            "is_active": user.is_active,
+            "progress_percent": percent,
+            "total_items": total_items,
+            "completed_items": completed_items
+        })
 
-        result.append(UserListItem(
-            id=user.id,
-            full_name=user.full_name,
-            email=user.email,
-            role_id=user.role_id,
-            role_name=role_name,
-            team_id=user_team_id,
-            team_name=team_name,
-            is_admin=user.is_admin,
-            is_active=user.is_active,
-            progress_percent=percent,
-            total_items=total,
-            completed_items=completed
-        ))
-
-    return result
+    return {
+        "items": result,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "total_pages": total_pages
+    }
 
 @router.get("/users/{user_id}", response_model=UserAdminResponse)
 def get_user(
@@ -829,63 +856,61 @@ def assign_user_team(
 
 # ====================== USER PROGRESS ======================
 
-@router.get("/progress", response_model=List[UserProgressSummary])
+@router.get("/progress")
 def list_users_progress(
+    page: int = 1,
+    page_size: int = 20,
+    q: str | None = None,
     current_admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
-    users = db.query(User).order_by(User.created_at.desc()).all()
+    query = db.query(User)
+    if q:
+        like = f"%{q.strip()}%"
+        query = query.filter(
+            (User.full_name.ilike(like)) | (User.email.ilike(like))
+        )
+    query = query.order_by(User.created_at.desc())
+
+    users, page, page_size, total, total_pages = paginate(query, page, page_size)
     result = []
 
     for user in users:
         role_name = None
-        total = 0
-        completed = 0
-
         if user.role_id:
             role = db.query(Role).filter(Role.id == user.role_id).first()
             role_name = role.name if role else None
 
-            checklist = db.query(Checklist).filter(Checklist.role_id == user.role_id).first()
-            if checklist:
-                items = db.query(ChecklistItem).filter(
-                    ChecklistItem.checklist_id == checklist.id
-                ).all()
-                total = len(items)
-                item_ids = [i.id for i in items]
-
-                if item_ids:
-                    completed = db.query(UserProgress).filter(
-                        UserProgress.user_id == user.id,
-                        UserProgress.checklist_item_id.in_(item_ids),
-                        UserProgress.is_completed == True
-                    ).count()
-
-        team_id = None
-        team_name = None
         user_team = db.query(UserTeam).filter(UserTeam.user_id == user.id).first()
-        if user_team:
-            team = db.query(Team).filter(Team.id == user_team.team_id).first()
-            team_id = user_team.team_id
+        team_id = user_team.team_id if user_team else None
+        team_name = None
+        if team_id:
+            team = db.query(Team).filter(Team.id == team_id).first()
             team_name = team.name if team else None
 
-        percent = round((completed / total) * 100, 1) if total > 0 else 0.0
+        total_items, completed_items, percent = get_user_progress_numbers(db, user)
 
-        result.append(UserProgressSummary(
-            user_id=user.id,
-            full_name=user.full_name,
-            email=user.email,
-            role_id=user.role_id,
-            role_name=role_name,
-            team_id=team_id,
-            team_name=team_name,
-            is_active=user.is_active,
-            total_items=total,
-            completed_items=completed,
-            progress_percent=percent
-        ))
+        result.append({
+            "user_id": user.id,
+            "full_name": user.full_name,
+            "email": user.email,
+            "role_id": user.role_id,
+            "role_name": role_name,
+            "team_id": team_id,
+            "team_name": team_name,
+            "is_active": user.is_active,
+            "total_items": total_items,
+            "completed_items": completed_items,
+            "progress_percent": percent
+        })
 
-    return result
+    return {
+        "items": result,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "total_pages": total_pages
+    }
 
 
 @router.get("/progress/{user_id}", response_model=UserProgressDetail)
@@ -1007,23 +1032,25 @@ def admin_create_user(
 
 # ====================== CHECKLIST COMMENTS ======================
 
-@router.get("/comments", response_model=list[CommentResponse])
+@router.get("/comments")
 def list_comments(
     status: str | None = None,
+    page: int = 1,
+    page_size: int = 20,
     current_admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
-    q = db.query(ChecklistComment)
+    query = db.query(ChecklistComment)
     if status:
-        q = q.filter(ChecklistComment.status == status)
+        query = query.filter(ChecklistComment.status == status)
+    query = query.order_by(ChecklistComment.created_at.desc())
 
-    rows = q.order_by(ChecklistComment.created_at.desc()).all()
+    rows, page, page_size, total, total_pages = paginate(query, page, page_size)
     result = []
 
     for row in rows:
         user = db.query(User).filter(User.id == row.user_id).first()
         item = db.query(ChecklistItem).filter(ChecklistItem.id == row.checklist_item_id).first()
-
         result.append({
             "id": row.id,
             "checklist_item_id": row.checklist_item_id,
@@ -1040,7 +1067,13 @@ def list_comments(
             "reviewed_at": row.reviewed_at,
         })
 
-    return result
+    return {
+        "items": result,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "total_pages": total_pages
+    }
 
 
 @router.patch("/comments/{comment_id}", response_model=CommentResponse)
@@ -1199,3 +1232,4 @@ def assign_user_role(
         "role_id": user.role_id,
         "role_name": role.name
     }
+

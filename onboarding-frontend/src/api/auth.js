@@ -16,13 +16,3 @@ export function login({ email, password }) {
 export function fetchMe() {
   return api.get("/auth/me");
 }
-
-
-
-export function updateMyProfile(payload) {
-  return api.patch("/auth/me", payload);
-}
-
-export function changeMyPassword(payload) {
-  return api.post("/auth/change-password", payload);
-}

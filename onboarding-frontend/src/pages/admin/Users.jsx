@@ -13,11 +13,18 @@ import EmptyState from "../../components/EmptyState";
 import StatusBadge from "../../components/StatusBadge";
 import ProgressBar from "../../components/ProgressBar";
 import LoadingButton from "../../components/LoadingButton";
+import Pagination from "../../components/Pagination";
 import { IconPlus } from "../../components/Icons";
 import UserManageDrawer from "./UserManageDrawer";
 
 const EMPTY_CREATE_FORM = {
-  email: "", full_name: "", password: "", role_id: "", team_id: "", is_admin: false, is_active: true,
+  email: "",
+  full_name: "",
+  password: "",
+  role_id: "",
+  team_id: "",
+  is_admin: false,
+  is_active: true,
 };
 
 export default function Users() {
@@ -37,44 +44,69 @@ export default function Users() {
   const [teamFilter, setTeamFilter] = useState("");
   const [activeFilter, setActiveFilter] = useState("");
 
+  // Pagination
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(10);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState(EMPTY_CREATE_FORM);
   const [creating, setCreating] = useState(false);
 
   const [manageUser, setManageUser] = useState(null);
 
-  // Debounce free-text search so we don't hit the backend on every keystroke.
+  // Debounce free-text search
   useEffect(() => {
-    const t = setTimeout(() => setQ(searchInput.trim()), 350);
+    const t = setTimeout(() => {
+      setQ(searchInput.trim());
+      setPage(1); // reset to first page on new search text
+    }, 350);
     return () => clearTimeout(t);
   }, [searchInput]);
 
-  function loadUsers() {
+  function loadUsers(nextPage = page) {
     setLoading(true);
+    setError("");
+
     fetchAdminUsers({
       q: q || undefined,
       role_id: roleFilter || undefined,
       team_id: teamFilter || undefined,
-      is_active: activeFilter || undefined,
+      is_active: activeFilter === "" ? undefined : activeFilter === "true",
+      page: nextPage,
+      page_size: pageSize,
     })
-      .then(({ data }) => setUsers(Array.isArray(data) ? data : data?.items || []))
+      .then(({ data }) => {
+        setUsers(Array.isArray(data?.items) ? data.items : []);
+        setPage(data?.page || nextPage);
+        setTotal(data?.total || 0);
+        setTotalPages(data?.total_pages || 1);
+      })
       .catch((err) => setError(extractErrorMessage(err, "Could not load users.")))
       .finally(() => setLoading(false));
   }
 
-  // Load roles/teams once for filter dropdowns and the drawer's team picker.
+  // Load roles/teams once
   useEffect(() => {
     Promise.all([fetchAdminRoles(), fetchAdminTeams()])
       .then(([rolesRes, teamsRes]) => {
         setRoles(Array.isArray(rolesRes.data) ? rolesRes.data : []);
         setTeams(Array.isArray(teamsRes.data) ? teamsRes.data : []);
       })
-      .catch(() => {
-        /* filters/drawer team picker just show fewer options if this fails */
-      });
+      .catch(() => {});
   }, []);
 
-  useEffect(loadUsers, [q, roleFilter, teamFilter, activeFilter]);
+  // Reload when filters change
+  useEffect(() => {
+    loadUsers(page);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, roleFilter, teamFilter, activeFilter, page]);
+
+  // When filters change, reset page to 1
+  useEffect(() => {
+    setPage(1);
+  }, [roleFilter, teamFilter, activeFilter]);
 
   function updateUserRow(userId, patch) {
     setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, ...patch } : u)));
@@ -101,7 +133,8 @@ export default function Users() {
       });
       toast.success("User created.");
       setCreateOpen(false);
-      loadUsers();
+      setPage(1);
+      loadUsers(1);
     } catch (err) {
       toast.error(extractErrorMessage(err, "Could not create this user."));
     } finally {
@@ -132,34 +165,56 @@ export default function Users() {
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder="Search by name or email…"
             style={{
-              flex: "1 1 220px", padding: "9px 12px", border: "1px solid var(--color-border-strong)",
-              borderRadius: "var(--radius-sm)", fontSize: 13.5,
+              flex: "1 1 220px",
+              padding: "9px 12px",
+              border: "1px solid var(--color-border-strong)",
+              borderRadius: "var(--radius-sm)",
+              fontSize: 13.5,
             }}
           />
           <select
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value)}
-            style={{ padding: "9px 10px", border: "1px solid var(--color-border-strong)", borderRadius: "var(--radius-sm)", fontSize: 13 }}
+            style={{
+              padding: "9px 10px",
+              border: "1px solid var(--color-border-strong)",
+              borderRadius: "var(--radius-sm)",
+              fontSize: 13,
+            }}
           >
             <option value="">All roles</option>
             {roles.map((r) => (
-              <option key={r.id} value={r.id}>{r.name}</option>
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
             ))}
           </select>
           <select
             value={teamFilter}
             onChange={(e) => setTeamFilter(e.target.value)}
-            style={{ padding: "9px 10px", border: "1px solid var(--color-border-strong)", borderRadius: "var(--radius-sm)", fontSize: 13 }}
+            style={{
+              padding: "9px 10px",
+              border: "1px solid var(--color-border-strong)",
+              borderRadius: "var(--radius-sm)",
+              fontSize: 13,
+            }}
           >
             <option value="">All teams</option>
             {teams.map((t) => (
-              <option key={t.id} value={t.id}>{t.name}</option>
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
             ))}
           </select>
           <select
             value={activeFilter}
             onChange={(e) => setActiveFilter(e.target.value)}
-            style={{ padding: "9px 10px", border: "1px solid var(--color-border-strong)", borderRadius: "var(--radius-sm)", fontSize: 13 }}
+            style={{
+              padding: "9px 10px",
+              border: "1px solid var(--color-border-strong)",
+              borderRadius: "var(--radius-sm)",
+              fontSize: 13,
+            }}
           >
             <option value="">Any status</option>
             <option value="true">Active</option>
@@ -174,7 +229,11 @@ export default function Users() {
         {!loading && users.length === 0 ? (
           <EmptyState
             title={hasActiveFilters ? "No matching users" : "No users yet"}
-            description={hasActiveFilters ? "Try a different search or clear your filters." : "Users will show up here once people start registering, or create one directly."}
+            description={
+              hasActiveFilters
+                ? "Try a different search or clear your filters."
+                : "Users will show up here once people start registering, or create one directly."
+            }
           />
         ) : (
           <div className="table-wrap">
@@ -196,7 +255,11 @@ export default function Users() {
                     <td className="cell-name">
                       {u.full_name}
                       {u.id === currentUser?.id && <span className="cell-muted"> (you)</span>}
-                      {u.is_admin && <span className="status-badge status-admin" style={{ marginLeft: 6 }}>Admin</span>}
+                      {u.is_admin && (
+                        <span className="status-badge status-admin" style={{ marginLeft: 6 }}>
+                          Admin
+                        </span>
+                      )}
                     </td>
                     <td className="cell-muted">{u.email}</td>
                     <td className="cell-muted">{u.role_name || "—"}</td>
@@ -222,6 +285,13 @@ export default function Users() {
           </div>
         )}
       </div>
+
+      <Pagination
+        page={page}
+        totalPages={totalPages}
+        total={total}
+        onPageChange={(p) => setPage(p)}
+      />
 
       {createOpen && (
         <Modal title="New user" onClose={() => setCreateOpen(false)} width={480}>
@@ -258,24 +328,38 @@ export default function Users() {
                 onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))}
                 placeholder="Welcome@123"
               />
-              <div className="field-hint">Share this with the user securely — they can change it after logging in.</div>
+              <div className="field-hint">
+                Share this with the user securely — they can change it after logging in.
+              </div>
             </div>
             <div className="grid grid-2" style={{ gap: 12 }}>
               <div className="field">
                 <label htmlFor="cu_role">Role</label>
-                <select id="cu_role" value={createForm.role_id} onChange={(e) => setCreateForm((f) => ({ ...f, role_id: e.target.value }))}>
+                <select
+                  id="cu_role"
+                  value={createForm.role_id}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, role_id: e.target.value }))}
+                >
                   <option value="">No role</option>
                   {roles.map((r) => (
-                    <option key={r.id} value={r.id}>{r.name}</option>
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                    </option>
                   ))}
                 </select>
               </div>
               <div className="field">
                 <label htmlFor="cu_team">Team</label>
-                <select id="cu_team" value={createForm.team_id} onChange={(e) => setCreateForm((f) => ({ ...f, team_id: e.target.value }))}>
+                <select
+                  id="cu_team"
+                  value={createForm.team_id}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, team_id: e.target.value }))}
+                >
                   <option value="">No team</option>
                   {teams.map((t) => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -288,7 +372,9 @@ export default function Users() {
                   checked={createForm.is_admin}
                   onChange={(e) => setCreateForm((f) => ({ ...f, is_admin: e.target.checked }))}
                 />
-                <label htmlFor="cu_admin" style={{ margin: 0 }}>Admin</label>
+                <label htmlFor="cu_admin" style={{ margin: 0 }}>
+                  Admin
+                </label>
               </div>
               <div className="checkbox-row">
                 <input
@@ -297,11 +383,18 @@ export default function Users() {
                   checked={createForm.is_active}
                   onChange={(e) => setCreateForm((f) => ({ ...f, is_active: e.target.checked }))}
                 />
-                <label htmlFor="cu_active" style={{ margin: 0 }}>Active</label>
+                <label htmlFor="cu_active" style={{ margin: 0 }}>
+                  Active
+                </label>
               </div>
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 22 }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setCreateOpen(false)} disabled={creating}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setCreateOpen(false)}
+                disabled={creating}
+              >
                 Cancel
               </button>
               <LoadingButton type="submit" loading={creating}>

@@ -1,5 +1,5 @@
-from pydantic import BaseModel, EmailStr
-from typing import Optional, List
+from pydantic import BaseModel, EmailStr 
+from typing import Optional, List, Generic, TypeVar
 from datetime import datetime
 
 class UserAdminResponse(BaseModel):
@@ -120,3 +120,12 @@ class PendingCommentItem(BaseModel):
 
 class UserRoleAssign(BaseModel):
     role_id: int
+
+T = TypeVar("T")
+
+class PageResponse(BaseModel, Generic[T]):
+    items: List[T]
+    page: int
+    page_size: int
+    total: int
+    total_pages: int

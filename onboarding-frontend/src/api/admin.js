@@ -5,15 +5,22 @@ export const fetchAdminStats = () => api.get("/admin/stats");
 
 // ---- Users ----
 export const fetchAdminUsers = (params = {}) => {
-  // Only send params that are actually set, so an empty search/filter
-  // doesn't get sent as an empty-string query param.
   const query = {};
+
   if (params.q) query.q = params.q;
   if (params.role_id) query.role_id = params.role_id;
   if (params.team_id) query.team_id = params.team_id;
-  if (params.is_active !== undefined && params.is_active !== "") query.is_active = params.is_active;
+  if (params.is_active !== undefined && params.is_active !== "") {
+    query.is_active = params.is_active;
+  }
+
+  // pagination
+  if (params.page) query.page = params.page;
+  if (params.page_size) query.page_size = params.page_size;
+
   return api.get("/admin/users", { params: query });
 };
+
 export const toggleUserAdmin = (id) => api.patch(`/admin/users/${id}/toggle-admin`);
 export const toggleUserActive = (id) => api.patch(`/admin/users/${id}/toggle-active`);
 
@@ -25,14 +32,20 @@ export const deleteAdminRole = (id) => api.delete(`/admin/roles/${id}`);
 
 // ---- Checklists (under a role) ----
 export const fetchRoleChecklists = (roleId) => api.get(`/admin/roles/${roleId}/checklists`);
-export const createRoleChecklist = (roleId, payload) => api.post(`/admin/roles/${roleId}/checklists`, payload);
-export const updateChecklist = (checklistId, payload) => api.put(`/admin/checklists/${checklistId}`, payload);
-export const deleteChecklist = (checklistId) => api.delete(`/admin/checklists/${checklistId}`);
+export const createRoleChecklist = (roleId, payload) =>
+  api.post(`/admin/roles/${roleId}/checklists`, payload);
+export const updateChecklist = (checklistId, payload) =>
+  api.put(`/admin/checklists/${checklistId}`, payload);
+export const deleteChecklist = (checklistId) =>
+  api.delete(`/admin/checklists/${checklistId}`);
 
 // ---- Checklist items ----
-export const fetchChecklistItems = (checklistId) => api.get(`/admin/checklists/${checklistId}/items`);
-export const createChecklistItem = (checklistId, payload) => api.post(`/admin/checklists/${checklistId}/items`, payload);
-export const updateChecklistItem = (itemId, payload) => api.put(`/admin/items/${itemId}`, payload);
+export const fetchChecklistItems = (checklistId) =>
+  api.get(`/admin/checklists/${checklistId}/items`);
+export const createChecklistItem = (checklistId, payload) =>
+  api.post(`/admin/checklists/${checklistId}/items`, payload);
+export const updateChecklistItem = (itemId, payload) =>
+  api.put(`/admin/items/${itemId}`, payload);
 export const deleteChecklistItem = (itemId) => api.delete(`/admin/items/${itemId}`);
 
 // ---- Teams ----
@@ -49,30 +62,65 @@ export const deleteAdminTool = (id) => api.delete(`/admin/tools/${id}`);
 
 // ---- Team <-> Tool mapping ----
 export const fetchTeamTools = (teamId) => api.get(`/admin/teams/${teamId}/tools`);
-export const addToolToTeam = (teamId, payload) => api.post(`/admin/teams/${teamId}/tools`, payload);
-export const removeToolFromTeam = (teamId, toolId) => api.delete(`/admin/teams/${teamId}/tools/${toolId}`);
+export const addToolToTeam = (teamId, payload) =>
+  api.post(`/admin/teams/${teamId}/tools`, payload);
+export const removeToolFromTeam = (teamId, toolId) =>
+  api.delete(`/admin/teams/${teamId}/tools/${toolId}`);
 
 // ---- Assign user to team ----
-export const assignUserTeam = (userId, teamId) => api.patch(`/admin/users/${userId}/team`, { team_id: teamId });
+export const assignUserTeam = (userId, teamId) =>
+  api.patch(`/admin/users/${userId}/team`, { team_id: teamId });
 
 // ---- Assign user role ----
-export const assignUserRole = (userId, roleId) => api.patch(`/admin/users/${userId}/role`, { role_id: roleId });
+export const assignUserRole = (userId, roleId) =>
+  api.patch(`/admin/users/${userId}/role`, { role_id: roleId });
 
 // ---- Create user ----
 export const createAdminUser = (payload) => api.post("/admin/users", payload);
 
 // ---- Progress tracking ----
-export const fetchAllUsersProgress = () => api.get("/admin/progress");
-export const fetchUserProgressDetail = (userId) => api.get(`/admin/progress/${userId}`);
-// Alias matching the spec's naming — same endpoint as fetchUserProgressDetail.
-export const fetchUserProgress = (userId) => api.get(`/admin/progress/${userId}`);
+export const fetchAllUsersProgress = (params = {}) => {
+  const query = {};
+  if (params.q) query.q = params.q;
+  if (params.page) query.page = params.page;
+  if (params.page_size) query.page_size = params.page_size;
+  return api.get("/admin/progress", { params: query });
+};
+
+export const fetchUserProgressDetail = (userId) =>
+  api.get(`/admin/progress/${userId}`);
+
+// Alias
+export const fetchUserProgress = (userId) =>
+  api.get(`/admin/progress/${userId}`);
 
 // ---- Team members ----
-export const fetchTeamMembers = (teamId) => api.get(`/admin/teams/${teamId}/members`);
-export const addTeamMember = (teamId, userId) => api.post(`/admin/teams/${teamId}/members`, { user_id: userId });
-export const removeTeamMember = (teamId, userId) => api.delete(`/admin/teams/${teamId}/members/${userId}`);
+export const fetchTeamMembers = (teamId) =>
+  api.get(`/admin/teams/${teamId}/members`);
+
+export const addTeamMember = (teamId, userId) =>
+  api.post(`/admin/teams/${teamId}/members`, { user_id: userId });
+
+export const removeTeamMember = (teamId, userId) =>
+  api.delete(`/admin/teams/${teamId}/members/${userId}`);
 
 // ---- Checklist comments / suggestions ----
-export const fetchAdminComments = (status) =>
-  api.get("/admin/comments", { params: status ? { status } : undefined });
-export const reviewAdminComment = (commentId, payload) => api.patch(`/admin/comments/${commentId}`, payload);
+export const fetchAdminComments = (params = {}) => {
+  const query = {};
+
+  // supports:
+  // fetchAdminComments("pending")
+  // fetchAdminComments({ status, page, page_size })
+  if (typeof params === "string") {
+    if (params) query.status = params;
+  } else {
+    if (params.status) query.status = params.status;
+    if (params.page) query.page = params.page;
+    if (params.page_size) query.page_size = params.page_size;
+  }
+
+  return api.get("/admin/comments", { params: query });
+};
+
+export const reviewAdminComment = (commentId, payload) =>
+  api.patch(`/admin/comments/${commentId}`, payload);

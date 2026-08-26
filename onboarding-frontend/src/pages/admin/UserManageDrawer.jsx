@@ -196,7 +196,7 @@ export default function UserManageDrawer({ user, teams, roles, open, onClose, on
                   ))}
                 </select>
                 <LoadingButton
-                  className="btn btn-secondary btn-sm"
+                  className="btn btn-primary btn-sm"
                   loading={savingRole}
                   disabled={!roleId || roleId === (user.role_id ? String(user.role_id) : "")}
                   onClick={handleSaveRole}
@@ -225,7 +225,7 @@ export default function UserManageDrawer({ user, teams, roles, open, onClose, on
                   ))}
                 </select>
                 <LoadingButton
-                  className="btn btn-secondary btn-sm"
+                  className="btn btn-primary btn-sm"
                   loading={savingTeam}
                   disabled={!teamId || teamId === (user.team_id ? String(user.team_id) : "")}
                   onClick={handleSaveTeam}
@@ -236,7 +236,7 @@ export default function UserManageDrawer({ user, teams, roles, open, onClose, on
             </div>
 
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <LoadingButton className="btn btn-secondary btn-sm" loading={togglingAdmin} onClick={handleToggleAdmin}>
+              <LoadingButton className="btn btn-success btn-sm" loading={togglingAdmin} onClick={handleToggleAdmin}>
                 {user.is_admin ? "Revoke admin" : "Make admin"}
               </LoadingButton>
               <LoadingButton
