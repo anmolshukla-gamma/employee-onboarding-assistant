@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useNavigate, useParams, Link } from "react-router-dom";
 import {
   fetchRoleChecklists,
   createRoleChecklist,
@@ -16,7 +16,7 @@ import { IconPlus, IconEdit, IconTrash, IconChecklist } from "../../components/I
 const EMPTY_FORM = { title: "", description: "" };
 
 export default function RoleChecklists() {
-  const { roleId } = useParams();
+  // const { roleId } = useParams();
   const toast = useToast();
 
   const [checklists, setChecklists] = useState([]);
@@ -30,6 +30,9 @@ export default function RoleChecklists() {
 
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
+
+  const navigate = useNavigate();
+  const { roleId } = useParams();
 
   function load() {
     setLoading(true);
@@ -98,8 +101,11 @@ export default function RoleChecklists() {
             <Link to="/admin/roles">Roles</Link> / Checklists for role #{roleId}
           </p>
         </div>
-        <button className="btn btn-primary" onClick={openCreate}>
-          <IconPlus width={15} height={15} /> New checklist
+        <button
+          className="btn btn-primary"
+          onClick={() => navigate(`/admin/roles/${roleId}/checklists/new`)}
+        >
+          + New checklist
         </button>
       </div>
 

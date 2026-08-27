@@ -8,6 +8,7 @@ import EmptyState from "../../components/EmptyState";
 import StatusBadge from "../../components/StatusBadge";
 import LoadingButton from "../../components/LoadingButton";
 import { IconPlus, IconEdit, IconTrash, IconRoles as IconRolesGlyph } from "../../components/Icons";
+import { useNavigate } from "react-router-dom";
 
 const EMPTY_FORM = { name: "", description: "", is_active: true };
 
@@ -24,6 +25,7 @@ export default function Roles() {
 
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const navigate = useNavigate();
 
   function load() {
     setLoading(true);
@@ -92,8 +94,8 @@ export default function Roles() {
           <h1>Roles</h1>
           <p>Create the roles new joiners choose from, and manage their checklists.</p>
         </div>
-        <button className="btn btn-primary" onClick={openCreate}>
-          <IconPlus width={15} height={15} /> New role
+        <button className="btn btn-primary" onClick={() => navigate("/admin/roles/new")}>
+          + New role
         </button>
       </div>
 

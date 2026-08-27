@@ -7,6 +7,7 @@ import EmptyState from "../../components/EmptyState";
 import StatusBadge from "../../components/StatusBadge";
 import LoadingButton from "../../components/LoadingButton";
 import { IconPlus, IconEdit, IconTrash } from "../../components/Icons";
+import { useNavigate } from "react-router-dom";
 
 const EMPTY_FORM = { name: "", description: "", category: "", request_url: "", guide_text: "", is_active: true };
 
@@ -23,6 +24,7 @@ export default function Tools() {
 
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const navigate = useNavigate();
 
   function load() {
     setLoading(true);
@@ -96,8 +98,8 @@ export default function Tools() {
           <h1>Tools</h1>
           <p>Manage the catalog of tools/systems that can be mapped to teams.</p>
         </div>
-        <button className="btn btn-primary" onClick={openCreate}>
-          <IconPlus width={15} height={15} /> New tool
+        <button className="btn btn-primary" onClick={() => navigate("/admin/tools/new")}>
+          + New tool
         </button>
       </div>
 
@@ -134,7 +136,7 @@ export default function Tools() {
                     </td>
                     <td>
                       <div className="row-actions">
-                        <button className="btn btn-secondary btn-sm" onClick={() => openEdit(t)}>
+                        <button className="btn btn-secondary btn-sm" onClick={() => navigate(`/admin/tools/${t.id}/edit`)}>
                           <IconEdit width={14} height={14} />
                         </button>
                         <button className="btn btn-danger btn-sm" onClick={() => setDeleteTarget(t)}>

@@ -6,6 +6,9 @@ import { PageLoading, Modal } from "../../components/Modal";
 import EmptyState from "../../components/EmptyState";
 import LoadingButton from "../../components/LoadingButton";
 import Pagination from "../../components/Pagination";
+import { useNavigate } from "react-router-dom";
+
+
 
 const STATUS_FILTERS = [
   { value: "", label: "All" },
@@ -38,6 +41,7 @@ export default function Comments() {
   const [reviewStatus, setReviewStatus] = useState("approved");
   const [reviewResponse, setReviewResponse] = useState("");
   const [reviewing, setReviewing] = useState(false);
+  const navigate = useNavigate();
 
   function loadComments(nextPage = page) {
     setLoading(true);
@@ -175,7 +179,14 @@ export default function Comments() {
                       <CommentStatusBadge status={c.status} />
                     </td>
                     <td>
-                      <button className="btn btn-secondary btn-sm" onClick={() => openReview(c)}>
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={() =>
+                          navigate(
+                            `/admin/comments/${c.id}/review${statusFilter ? `?status=${encodeURIComponent(statusFilter)}` : ""}`
+                          )
+                        }
+                      >
                         Review
                       </button>
                     </td>

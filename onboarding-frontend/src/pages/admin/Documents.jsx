@@ -8,6 +8,11 @@ import EmptyState from "../../components/EmptyState";
 import StatusBadge from "../../components/StatusBadge";
 import LoadingButton from "../../components/LoadingButton";
 import { IconUpload, IconTrash } from "../../components/Icons";
+import { useNavigate } from "react-router-dom";
+
+
+
+
 
 export default function Documents() {
   const toast = useToast();
@@ -25,6 +30,8 @@ export default function Documents() {
   const [processingId, setProcessingId] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
+
+  const navigate = useNavigate();
 
   function load() {
     setLoading(true);
@@ -102,8 +109,8 @@ export default function Documents() {
           <h1>Documents</h1>
           <p>Upload official policy documents so the AI assistant can answer questions from them.</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setUploadOpen(true)}>
-          <IconUpload width={15} height={15} /> Upload document
+        <button className="btn btn-primary" onClick={() => navigate("/admin/documents/upload")}>
+          Upload document
         </button>
       </div>
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import {
   fetchChecklistItems,
   createChecklistItem,
@@ -13,7 +13,11 @@ import EmptyState from "../../components/EmptyState";
 import LoadingButton from "../../components/LoadingButton";
 import { IconPlus, IconEdit, IconTrash, IconExternalLink } from "../../components/Icons";
 
+// import { Link, useParams, useNavigate } from "react-router-dom";
+
 const RESOURCE_TYPES = ["link", "document"];
+
+
 
 const EMPTY_FORM = {
   title: "",
@@ -60,6 +64,8 @@ export default function ChecklistItems() {
 
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
+
+  const navigate = useNavigate();
 
   function load() {
     setLoading(true);
@@ -172,8 +178,11 @@ export default function ChecklistItems() {
             <Link to="/admin/roles">Roles</Link> / Checklist #{checklistId} items
           </p>
         </div>
-        <button className="btn btn-primary" onClick={openCreate}>
-          <IconPlus width={15} height={15} /> New item
+        <button
+          className="btn btn-primary"
+          onClick={() => navigate(`/admin/checklists/${checklistId}/items/new`)}
+        >
+          + New item
         </button>
       </div>
 
@@ -210,8 +219,11 @@ export default function ChecklistItems() {
                     <td>{item.is_mandatory ? <span className="badge-mandatory">Required</span> : <span className="cell-muted">Optional</span>}</td>
                     <td>
                       <div className="row-actions">
-                        <button className="btn btn-secondary btn-sm" onClick={() => openEdit(item)}>
-                          <IconEdit width={14} height={14} />
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => navigate(`/admin/checklists/${checklistId}/items/${item.id}/edit`)}
+                        >
+                          Edit
                         </button>
                         <button className="btn btn-danger btn-sm" onClick={() => setDeleteTarget(item)}>
                           <IconTrash width={14} height={14} />

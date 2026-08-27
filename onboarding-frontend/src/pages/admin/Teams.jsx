@@ -8,6 +8,7 @@ import EmptyState from "../../components/EmptyState";
 import StatusBadge from "../../components/StatusBadge";
 import LoadingButton from "../../components/LoadingButton";
 import { IconPlus, IconEdit, IconTrash, IconWrench } from "../../components/Icons";
+import { useNavigate } from "react-router-dom";
 
 const EMPTY_FORM = { name: "", description: "", is_active: true };
 
@@ -24,6 +25,7 @@ export default function Teams() {
 
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const navigate = useNavigate();
 
   function load() {
     setLoading(true);
@@ -91,8 +93,8 @@ export default function Teams() {
           <h1>Teams</h1>
           <p>Create teams and manage which tools each team has access to.</p>
         </div>
-        <button className="btn btn-primary" onClick={openCreate}>
-          <IconPlus width={15} height={15} /> New team
+        <button className="btn btn-primary" onClick={() => navigate("/admin/teams/new")}>
+          + New team
         </button>
       </div>
 
@@ -125,7 +127,7 @@ export default function Teams() {
                         <Link className="btn btn-secondary btn-sm" to={`/admin/teams/${t.id}`}>
                           <IconWrench width={14} height={14} /> Manage team
                         </Link>
-                        <button className="btn btn-secondary btn-sm" onClick={() => openEdit(t)}>
+                        <button className="btn btn-secondary btn-sm" onClick={() => navigate(`/admin/teams/${t.id}/edit`)}>
                           <IconEdit width={14} height={14} />
                         </button>
                         <button className="btn btn-danger btn-sm" onClick={() => setDeleteTarget(t)}>

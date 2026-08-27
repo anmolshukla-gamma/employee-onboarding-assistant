@@ -17,6 +17,10 @@ import LoadingButton from "../../components/LoadingButton";
 import { IconPlus, IconTrash } from "../../components/Icons";
 import TeamMembersPanel from "./TeamMembersPanel";
 
+import { useNavigate } from "react-router-dom";
+
+
+
 const TABS = [
   { key: "members", label: "Members" },
   { key: "tools", label: "Tools" },
@@ -38,6 +42,8 @@ function ToolsTab({ teamId }) {
 
   const [removeTarget, setRemoveTarget] = useState(null);
   const [removing, setRemoving] = useState(false);
+
+  const navigate = useNavigate();
 
   function load() {
     setLoading(true);
@@ -107,8 +113,11 @@ function ToolsTab({ teamId }) {
     <div>
       <div className="flex-between" style={{ marginBottom: 14 }}>
         <p className="text-muted" style={{ fontSize: 13 }}>Tools employees on this team see under My Access.</p>
-        <button className="btn btn-secondary btn-sm" onClick={openAdd} disabled={availableTools.length === 0}>
-          <IconPlus width={14} height={14} /> Add tool
+        <button
+          className="btn btn-primary btn-sm"
+          onClick={() => navigate(`/admin/teams/${teamId}/tools/add`)}
+        >
+          + Add tools
         </button>
       </div>
 

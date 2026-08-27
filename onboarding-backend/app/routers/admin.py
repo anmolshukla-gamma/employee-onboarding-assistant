@@ -34,6 +34,7 @@ from app.schemas.admin import UserListItem
 from app.schemas.team import TeamMemberResponse, AddTeamMemberRequest
 from app.schemas.admin import UserRoleAssign
 import math
+import json
 
 
 
@@ -79,6 +80,24 @@ def get_user_progress_numbers(db: Session, user: User):
 
     percent = round((completed / total) * 100, 1) if total > 0 else 0.0
     return total, completed, percent
+
+def parse_resources(value):
+    if value is None:
+        return []
+    if isinstance(value, (list, dict)):
+        return value
+    try:
+        return json.loads(value)
+    except Exception:
+        return []
+
+
+def dump_resources(value):
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    return json.dumps(value)
 
 
 

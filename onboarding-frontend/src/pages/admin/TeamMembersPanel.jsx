@@ -7,6 +7,8 @@ import EmptyState from "../../components/EmptyState";
 import StatusBadge from "../../components/StatusBadge";
 import LoadingButton from "../../components/LoadingButton";
 import { IconPlus, IconTrash } from "../../components/Icons";
+import { useNavigate } from "react-router-dom";
+
 
 export default function TeamMembersPanel({ teamId, teamName }) {
   const toast = useToast();
@@ -23,6 +25,7 @@ export default function TeamMembersPanel({ teamId, teamName }) {
 
   const [removeTarget, setRemoveTarget] = useState(null);
   const [removing, setRemoving] = useState(false);
+  const navigate = useNavigate();
 
   function load() {
     setLoading(true);
@@ -91,8 +94,11 @@ export default function TeamMembersPanel({ teamId, teamName }) {
     <div>
       <div className="flex-between" style={{ marginBottom: 14 }}>
         <p className="text-muted" style={{ fontSize: 13 }}>People currently assigned to {teamName || "this team"}.</p>
-        <button className="btn btn-secondary btn-sm" onClick={openAdd}>
-          <IconPlus width={14} height={14} /> Add member
+        <button
+          className="btn btn-primary btn-sm"
+          onClick={() => navigate(`/admin/teams/${teamId}/members/add`)}
+        >
+          + Add member
         </button>
       </div>
 

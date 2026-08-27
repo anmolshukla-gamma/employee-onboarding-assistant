@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { toggleUserAdmin, toggleUserActive, assignUserTeam, assignUserRole, fetchUserProgress } from "../../api/admin";
+import {
+  toggleUserAdmin,
+  toggleUserActive,
+  assignUserTeam,
+  assignUserRole,
+  fetchUserProgress,
+} from "../../api/admin";
 import { extractErrorMessage } from "../../api/axios";
 import { useToast } from "../../context/ToastContext";
 import LoadingButton from "../../components/LoadingButton";
@@ -7,17 +13,15 @@ import StatusBadge from "../../components/StatusBadge";
 import ProgressBar from "../../components/ProgressBar";
 import { IconClose } from "../../components/Icons";
 
-/**
- * @param {Object} props
- * @param {Object} props.user - the row from the users table (id, full_name, email, role_name, team_id, team_name, is_admin, is_active, ...)
- * @param {Array} props.teams
- * @param {Array} props.roles
- * @param {boolean} props.open
- * @param {() => void} props.onClose
- * @param {(userId: number, patch: Object) => void} props.onUserChange - called with a partial patch to update the row in the parent table
- * @param {number} [props.currentUserId] - to prevent self-deactivation
- */
-export default function UserManageDrawer({ user, teams, roles, open, onClose, onUserChange, currentUserId }) {
+export default function UserManageDrawer({
+  user,
+  teams,
+  roles,
+  open,
+  onClose,
+  onUserChange,
+  currentUserId,
+}) {
   const toast = useToast();
 
   const [teamId, setTeamId] = useState(user?.team_id ? String(user.team_id) : "");
@@ -78,6 +82,13 @@ export default function UserManageDrawer({ user, teams, roles, open, onClose, on
 
   if (!open || !user) return null;
 
+  const initials = (user.full_name || "?")
+    .split(" ")
+    .map((p) => p[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
   async function handleSaveTeam() {
     if (!teamId) return;
     setSavingTeam(true);
@@ -112,7 +123,9 @@ export default function UserManageDrawer({ user, teams, roles, open, onClose, on
     try {
       await toggleUserAdmin(user.id);
       onUserChange(user.id, { is_admin: !user.is_admin });
-      toast.success(`${user.full_name} is ${!user.is_admin ? "now an admin" : "no longer an admin"}.`);
+      toast.success(
+        `${user.full_name} is ${!user.is_admin ? "now an admin" : "no longer an admin"}.`
+      );
     } catch (err) {
       toast.error(extractErrorMessage(err, "Could not update admin status."));
     } finally {
@@ -139,60 +152,62 @@ export default function UserManageDrawer({ user, teams, roles, open, onClose, on
 
   return (
     <div className="drawer-overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <aside className="drawer-panel" role="dialog" aria-modal="true" aria-label={`Manage ${user.full_name}`}>
-        <div className="drawer-header">
-          <div className="drawer-header-text">
-            <div className="checklist-item-title" style={{ fontSize: 16 }}>
-              {user.full_name}
-              {user.is_admin && <span className="status-badge status-admin" style={{ marginLeft: 4 }}>Admin</span>}
+      <aside
+        className="drawer-panel umd-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Manage ${user.full_name}`}
+      >
+        {/* Hero header */}
+        <div className="umd-hero">
+          <div className="umd-hero-main">
+            <div className="umd-avatar">{initials}</div>
+            <div className="umd-hero-text">
+              <div className="umd-name-row">
+                <h2>{user.full_name}</h2>
+                {user.is_admin && <span className="status-badge status-admin">Admin</span>}
+              </div>
+              <p>{user.email}</p>
             </div>
-            <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>{user.email}</div>
           </div>
           <button className="btn btn-ghost btn-icon" onClick={onClose} aria-label="Close">
             <IconClose width={17} height={17} />
           </button>
         </div>
 
-        <div className="drawer-body">
-          {/* Profile */}
-          <div className="drawer-section">
-            <h4 className="drawer-section-title">Profile</h4>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 13 }}>
-              <div className="flex-between">
-                <span className="text-muted">Role</span>
-                <span>{user.role_name || "—"}</span>
-              </div>
-              <div className="flex-between">
-                <span className="text-muted">Team</span>
-                <span>{user.team_name || "—"}</span>
-              </div>
-              <div className="flex-between">
-                <span className="text-muted">Status</span>
-                <StatusBadge status={user.is_active ? "active" : "inactive"} />
-              </div>
-            </div>
+        {/* Quick stats */}
+        <div className="umd-stats">
+          <div className="umd-stat">
+            <span>Role</span>
+            <strong>{user.role_name || "Not set"}</strong>
           </div>
+          <div className="umd-stat">
+            <span>Team</span>
+            <strong>{user.team_name || "Not set"}</strong>
+          </div>
+          <div className="umd-stat">
+            <span>Status</span>
+            <StatusBadge status={user.is_active ? "active" : "inactive"} />
+          </div>
+        </div>
 
-          {/* Actions */}
-          <div className="drawer-section">
-            <h4 className="drawer-section-title">Actions</h4>
+        <div className="drawer-body umd-body">
+          {/* Access */}
+          <section className="umd-card">
+            <div className="umd-card-head">
+              <h3>Access</h3>
+              <p>Role drives checklist. Team drives tools.</p>
+            </div>
 
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ display: "block", fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>
-                Assign / change role
-              </label>
-              <div style={{ display: "flex", gap: 8 }}>
-                <select
-                  value={roleId}
-                  onChange={(e) => setRoleId(e.target.value)}
-                  style={{
-                    flex: 1, padding: "8px 10px", border: "1px solid var(--color-border-strong)",
-                    borderRadius: "var(--radius-sm)", fontSize: 13,
-                  }}
-                >
+            <div className="umd-field">
+              <label>Role</label>
+              <div className="umd-row">
+                <select value={roleId} onChange={(e) => setRoleId(e.target.value)}>
                   <option value="">No role</option>
                   {roles.map((r) => (
-                    <option key={r.id} value={r.id}>{r.name}</option>
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                    </option>
                   ))}
                 </select>
                 <LoadingButton
@@ -206,22 +221,15 @@ export default function UserManageDrawer({ user, teams, roles, open, onClose, on
               </div>
             </div>
 
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ display: "block", fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>
-                Assign / change team
-              </label>
-              <div style={{ display: "flex", gap: 8 }}>
-                <select
-                  value={teamId}
-                  onChange={(e) => setTeamId(e.target.value)}
-                  style={{
-                    flex: 1, padding: "8px 10px", border: "1px solid var(--color-border-strong)",
-                    borderRadius: "var(--radius-sm)", fontSize: 13,
-                  }}
-                >
+            <div className="umd-field">
+              <label>Team</label>
+              <div className="umd-row">
+                <select value={teamId} onChange={(e) => setTeamId(e.target.value)}>
                   <option value="">No team</option>
                   {teams.map((t) => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
                   ))}
                 </select>
                 <LoadingButton
@@ -234,63 +242,101 @@ export default function UserManageDrawer({ user, teams, roles, open, onClose, on
                 </LoadingButton>
               </div>
             </div>
+          </section>
 
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <LoadingButton className="btn btn-success btn-sm" loading={togglingAdmin} onClick={handleToggleAdmin}>
-                {user.is_admin ? "Revoke admin" : "Make admin"}
-              </LoadingButton>
-              <LoadingButton
-                className="btn btn-danger btn-sm"
-                loading={togglingActive}
-                disabled={user.id === currentUserId}
-                onClick={handleToggleActive}
-              >
-                {user.is_active ? "Deactivate" : "Activate"}
-              </LoadingButton>
+          {/* Permissions */}
+          <section className="umd-card">
+            <div className="umd-card-head">
+              <h3>Permissions</h3>
+              <p>Admin rights and account availability.</p>
             </div>
-            {user.id === currentUserId && (
-              <p className="text-muted" style={{ fontSize: 11.5, marginTop: 8 }}>You can't deactivate your own account.</p>
-            )}
-          </div>
+
+            <div className="umd-toggles">
+              <div className="umd-toggle-row">
+                <div>
+                  <strong>Admin access</strong>
+                  <span>{user.is_admin ? "Can manage org settings" : "Standard employee access"}</span>
+                </div>
+                <LoadingButton
+                  className={`btn btn-sm ${user.is_admin ? "btn-secondary" : "btn-primary"}`}
+                  loading={togglingAdmin}
+                  onClick={handleToggleAdmin}
+                >
+                  {user.is_admin ? "Revoke" : "Grant"}
+                </LoadingButton>
+              </div>
+
+              <div className="umd-toggle-row">
+                <div>
+                  <strong>Account status</strong>
+                  <span>
+                    {user.id === currentUserId
+                      ? "You can't deactivate your own account"
+                      : user.is_active
+                      ? "User can sign in"
+                      : "User is blocked from sign-in"}
+                  </span>
+                </div>
+                <LoadingButton
+                  className={`btn btn-sm ${user.is_active ? "btn-danger" : "btn-primary"}`}
+                  loading={togglingActive}
+                  disabled={user.id === currentUserId}
+                  onClick={handleToggleActive}
+                >
+                  {user.is_active ? "Deactivate" : "Activate"}
+                </LoadingButton>
+              </div>
+            </div>
+          </section>
 
           {/* Progress */}
-          <div className="drawer-section">
-            <h4 className="drawer-section-title">Checklist Progress</h4>
+          <section className="umd-card">
+            <div className="umd-card-head">
+              <h3>Onboarding progress</h3>
+              <p>Live checklist completion for this user.</p>
+            </div>
+
             {progressLoading && <p className="text-muted" style={{ fontSize: 13 }}>Loading progress…</p>}
-            {!progressLoading && progressError && <div className="top-align-error">{progressError}</div>}
+            {!progressLoading && progressError && (
+              <div className="top-align-error">{progressError}</div>
+            )}
             {!progressLoading && !progressError && progress && (
               <>
-                <div className="flex-between" style={{ marginBottom: 8 }}>
-                  <span style={{ fontSize: 12.5, fontWeight: 600 }}>
+                <div className="umd-progress-top">
+                  <span>
                     {progress.completed_items}/{progress.total_items} complete
                   </span>
+                  <strong>{Math.round(progress.progress_percent || 0)}%</strong>
                 </div>
                 <ProgressBar percent={progress.progress_percent} />
 
                 {groupedItems.length > 0 && (
-                  <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 14 }}>
+                  <div className="umd-progress-list">
                     {groupedItems.map(([category, items]) => (
-                      <div key={category}>
-                        <div className="checklist-group-title" style={{ marginBottom: 6 }}>{category}</div>
+                      <div key={category} className="umd-cat">
+                        <div className="umd-cat-title">{category}</div>
                         {items.map((item) => (
                           <div
                             key={item.item_id}
-                            style={{
-                              display: "flex", alignItems: "center", gap: 8, fontSize: 12.8,
-                              padding: "6px 0", color: item.is_completed ? "var(--color-text-muted)" : "var(--color-text)",
-                            }}
+                            className={`umd-item ${item.is_completed ? "done" : ""}`}
                           >
-                            <span
-                              className={`check-circle ${item.is_completed ? "checked" : ""}`}
-                              style={{ width: 16, height: 16, cursor: "default" }}
-                            >
+                            <span className={`check-circle ${item.is_completed ? "checked" : ""}`}>
                               {item.is_completed && (
-                                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
+                                <svg
+                                  width="9"
+                                  height="9"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="#fff"
+                                  strokeWidth="4"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
                                   <path d="M20 6L9 17l-5-5" />
                                 </svg>
                               )}
                             </span>
-                            <span style={{ textDecoration: item.is_completed ? "line-through" : "none" }}>{item.title}</span>
+                            <span>{item.title}</span>
                           </div>
                         ))}
                       </div>
@@ -299,12 +345,13 @@ export default function UserManageDrawer({ user, teams, roles, open, onClose, on
                 )}
               </>
             )}
-          </div>
+          </section>
         </div>
 
-        <div className="drawer-footer">
-          <div style={{ flex: 1 }} />
-          <button className="btn btn-secondary" onClick={onClose}>Close</button>
+        <div className="drawer-footer umd-footer">
+          <button className="btn btn-secondary" onClick={onClose}>
+            Close
+          </button>
         </div>
       </aside>
     </div>

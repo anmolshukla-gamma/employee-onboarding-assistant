@@ -6,7 +6,7 @@ import { ProtectedRoute, AdminRoute, GuestRoute, landingPathFor } from "./compon
 import { PageLoading } from "./components/Modal";
 import Layout from "./components/Layout";
 import Landing from "./pages/Landing";
-import CreateUser from "./pages/admin/CreateUser";
+
 
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -29,6 +29,27 @@ import AdminTools from "./pages/admin/Tools";
 import AdminProgress from "./pages/admin/Progress";
 import AdminProgressDetail from "./pages/admin/ProgressDetail";
 import AdminComments from "./pages/admin/Comments";
+
+import CreateUser from "./pages/admin/CreateUser";
+import CreateRole from "./pages/admin/CreateRole";
+import CreateChecklistItem from "./pages/admin/CreateChecklistItem";
+import EditChecklistItem from "./pages/admin/EditChecklistItem";
+import CreateChecklist from "./pages/admin/CreateChecklist";
+import CreateTeam from "./pages/admin/CreateTeam";
+import EditTeam from "./pages/admin/EditTeam";
+import AddTeamTools from "./pages/admin/AddTeamTools";
+import AddTeamMember from "./pages/admin/AddTeamMember";
+import CreateTool from "./pages/admin/CreateTool";
+import EditTool from "./pages/admin/EditTool";
+import UploadDocument from "./pages/admin/UploadDocument";
+import ReviewComment from "./pages/admin/ReviewComment";
+
+
+
+
+
+
+
 
 /** "/" shows the public landing page to signed-out visitors, and sends
  *  signed-in users straight to their dashboard (admin / checklist / select-role). */
@@ -79,6 +100,27 @@ export default function App() {
                     <Route path="/admin/progress/:userId" element={<AdminProgressDetail />} />
                     <Route path="/admin/comments" element={<AdminComments />} />
                     <Route path="/admin/users/new" element={<CreateUser />} />
+                    <Route path="/admin/roles/new" element={<CreateRole />} />
+                    <Route
+                      path="/admin/checklists/:checklistId/items/new"
+                      element={<CreateChecklistItem />}
+                    />
+                    <Route
+                      path="/admin/checklists/:checklistId/items/:itemId/edit"
+                      element={<EditChecklistItem />}
+                    />
+                    <Route
+                      path="/admin/roles/:roleId/checklists/new"
+                      element={<CreateChecklist />}
+                    />
+                    <Route path="/admin/teams/new" element={<CreateTeam />} />
+                    <Route path="/admin/teams/:teamId/edit" element={<EditTeam />} />
+                    <Route path="/admin/teams/:teamId/tools/add" element={<AddTeamTools />} />
+                    <Route path="/admin/teams/:teamId/members/add" element={<AddTeamMember />} />
+                    <Route path="/admin/tools/new" element={<CreateTool />} />
+                    <Route path="/admin/tools/:toolId/edit" element={<EditTool />} />
+                    <Route path="/admin/documents/upload" element={<UploadDocument />} />
+                    <Route path="/admin/comments/:commentId/review" element={<ReviewComment />} />
                   </Route>
                 </Route>
               </Route>
@@ -86,6 +128,7 @@ export default function App() {
               <Route path="/" element={<RootRoute />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
+            
           </ChatProvider>
         </ToastProvider>
       </AuthProvider>
