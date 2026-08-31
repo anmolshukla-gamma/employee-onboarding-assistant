@@ -9,7 +9,7 @@ def ask_question(
 ) -> dict:
     history = history or []
 
-    # Fix 2: retrieve using focused query when provided
+    # Retrieve using focused query when provided
     retrieval_query = (search_question or question).strip()
     docs = search_similar_chunks(retrieval_query, k=4)
 
@@ -22,10 +22,16 @@ def ask_question(
     context = "\n\n".join([doc.page_content for doc in docs])
     sources = list({doc.metadata.get("title", "Unknown") for doc in docs})
 
+    # Keep only the last few turns so history doesn't drown the current question
+    recent = history[-4:] if history else []
     history_text = ""
-    for msg in history:
+    for msg in recent:
         role_label = "User" if msg["role"] == "user" else "Assistant"
-        history_text += f"{role_label}: {msg['content']}\n"
+        content = msg.get("content") or ""
+        # Trim long prior answers — keep a cue, not a full script to copy
+        if msg.get("role") == "assistant" and len(content) > 400:
+            content = content[:400].rstrip() + "..."
+        history_text += f"{role_label}: {content}\n"
 
     prompt = f"""You are an internal company onboarding assistant.
 
@@ -51,11 +57,13 @@ Preferred structure:
 3. Optional short section for issues/contact
 
 Conversation rules:
-- Prioritize the current question and retrieved context.
-- Use recent conversation only for true follow-ups that refer to the previous answer.
+- Answer the CURRENT question only.
+- Recent conversation is background only. Never repeat or rewrite the previous full answer.
+- If the user asks about something mentioned in the previous answer (for example "raise an IT ticket"), explain THAT topic using the context.
+- Do not continue explaining the previous onboarding step unless the user asks for that step again.
+- Prefer retrieved context over prior assistant text when they conflict.
 - If the current question introduces a different topic, completely ignore the recent conversation.
 - If the question names a specific onboarding step, answer ONLY that step.
-- Do not answer a different checklist step.
 
 Context:
 {context}
