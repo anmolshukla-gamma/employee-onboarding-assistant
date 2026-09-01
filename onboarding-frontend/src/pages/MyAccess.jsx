@@ -27,7 +27,7 @@ function ToolCard({ tool }) {
             <div className="checklist-item-desc" style={{ marginTop: 6 }}>{tool.description}</div>
           )}
         </div>
-        {/* {tool.request_url && (
+        {tool.request_url && (
           <a
             href={tool.request_url}
             target="_blank"
@@ -37,7 +37,7 @@ function ToolCard({ tool }) {
           >
             Request Access <IconExternalLink width={13} height={13} />
           </a>
-        )} */}
+        )}
       </div>
 
       {guide && (
