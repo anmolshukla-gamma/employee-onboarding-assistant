@@ -60,6 +60,13 @@ export const createAdminTool = (payload) => api.post("/admin/tools", payload);
 export const updateAdminTool = (id, payload) => api.put(`/admin/tools/${id}`, payload);
 export const deleteAdminTool = (id) => api.delete(`/admin/tools/${id}`);
 
+// ---- Tool Access Requests ----
+export const fetchToolRequests = (statusFilter) =>
+  api.get("/admin/tool-requests", { params: statusFilter ? { status_filter: statusFilter } : {} });
+export const approveToolRequest = (id) => api.post(`/admin/tool-requests/${id}/approve`);
+export const rejectToolRequest = (id) => api.post(`/admin/tool-requests/${id}/reject`);
+export const revokeToolRequest = (id) => api.post(`/admin/tool-requests/${id}/revoke`);
+
 // ---- Team <-> Tool mapping ----
 export const fetchTeamTools = (teamId) => api.get(`/admin/teams/${teamId}/tools`);
 export const addToolToTeam = (teamId, payload) =>

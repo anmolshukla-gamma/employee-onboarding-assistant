@@ -34,6 +34,7 @@ class ToolCreate(BaseModel):
     category: Optional[str] = None
     request_url: Optional[str] = None
     guide_text: Optional[str] = None
+    provider_key: Optional[str] = None
     is_active: bool = True
 
 
@@ -43,6 +44,7 @@ class ToolUpdate(BaseModel):
     category: Optional[str] = None
     request_url: Optional[str] = None
     guide_text: Optional[str] = None
+    provider_key: Optional[str] = None
     is_active: Optional[bool] = None
 
 
@@ -53,6 +55,7 @@ class ToolResponse(BaseModel):
     category: Optional[str] = None
     request_url: Optional[str] = None
     guide_text: Optional[str] = None
+    provider_key: Optional[str] = None 
     is_active: bool
     created_at: Optional[datetime] = None
 
@@ -117,3 +120,30 @@ class TeamMemberResponse(BaseModel):
 
 class AddTeamMemberRequest(BaseModel):
     user_id: int
+
+
+
+
+# ----- Tool Access Requests -----
+class ToolAccessRequestCreate(BaseModel):
+    tool_id: int
+    identifier: Optional[str] = None   # e.g. GitHub username; omit if the tool doesn't need one
+    reason: Optional[str] = None
+
+
+class ToolAccessRequestResponse(BaseModel):
+    id: int
+    tool_id: int
+    tool_name: str
+    identifier: Optional[str] = None
+    status: str
+    reason: Optional[str] = None
+    requested_at: datetime
+    reviewed_at: Optional[datetime] = None
+    provisioning_message: Optional[str] = None
+
+
+class AdminToolAccessRequestResponse(ToolAccessRequestResponse):
+    employee_id: int
+    employee_name: str
+    employee_email: str

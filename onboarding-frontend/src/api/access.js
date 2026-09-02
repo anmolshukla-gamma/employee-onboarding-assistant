@@ -4,3 +4,11 @@ import api from "./axios";
 export function fetchMyAccess() {
   return api.get("/access/my");
 }
+
+export function requestToolAccess(payload) {
+  return api.post("/access/request", payload);
+}
+
+export function fetchMyToolRequests() {
+  return api.get("/access/requests");
+}

@@ -4,7 +4,7 @@ from app.database import engine, Base
 from app.models import user, role, checklist, document,chat
 from app.routers import auth,role,checklist,document,chat,admin,access
 from app.models.chat import ChatMessage
-from app.models.team import Team, Tool, TeamTool, UserTeam
+from app.models.team import Team, Tool, TeamTool, UserTeam, ToolAccessRequest
 from app.models.comment import ChecklistComment
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address

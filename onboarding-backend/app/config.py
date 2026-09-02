@@ -6,6 +6,9 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    GITHUB_TOKEN: Optional[str] = None
+    GITHUB_ORG: Optional[str] = None
+    GITHUB_TEAM_SLUG: Optional[str] = None
 
     LLM_PROVIDER: str = "groq"  # groq | openai | gemini
     GROQ_API_KEY: Optional[str] = None

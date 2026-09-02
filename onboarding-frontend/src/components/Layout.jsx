@@ -29,6 +29,7 @@ const PAGE_TITLES = {
   "/admin/documents": "Manage documents",
   "/admin/teams": "Manage teams",
   "/admin/tools": "Manage tools",
+  "/admin/tool-requests": "Tool access requests",
   "/admin/progress": "User progress",
   "/admin/comments": "Checklist feedback",
 };
@@ -117,6 +118,9 @@ export default function Layout() {
               </NavLink>
               <NavLink to="/admin/tools" className={({ isActive }) => `sidebar-link ${isActive ? "active" : ""}`} onClick={closeMobile}>
                 <IconWrench /> Tools
+              </NavLink>
+              <NavLink to="/admin/tool-requests" className={({ isActive }) => `sidebar-link ${isActive ? "active" : ""}`} onClick={closeMobile}>
+                <IconKey /> Access Requests
               </NavLink>
               <NavLink to="/admin/documents" className={({ isActive }) => `sidebar-link ${isActive ? "active" : ""}`} onClick={closeMobile}>
                 <IconDocuments /> Documents

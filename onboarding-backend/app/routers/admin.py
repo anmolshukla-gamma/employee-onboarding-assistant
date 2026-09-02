@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.core.security import hash_password
-from typing import List
+from typing import List, Optional
 from app.models.team import Team, Tool, TeamTool, UserTeam
 from app.schemas.team import (
     TeamCreate, TeamUpdate, TeamResponse,
@@ -33,6 +33,13 @@ from app.schemas.comment import CommentResponse, CommentReview
 from app.schemas.admin import UserListItem
 from app.schemas.team import TeamMemberResponse, AddTeamMemberRequest
 from app.schemas.admin import UserRoleAssign
+from app.models.team import ToolAccessRequest
+from app.schemas.team import ToolAccessRequestResponse, AdminToolAccessRequestResponse
+from app.services.github_connector import GitHubConnector
+
+CONNECTORS = {
+    "github": GitHubConnector(),
+}
 import math
 import json
 
@@ -688,6 +695,7 @@ def create_tool(
         category=data.category,
         request_url=data.request_url,
         guide_text=data.guide_text,
+        provider_key=data.provider_key,
         is_active=data.is_active
     )
     db.add(tool)
@@ -728,6 +736,8 @@ def update_tool(
         tool.request_url = data.request_url
     if data.guide_text is not None:
         tool.guide_text = data.guide_text
+    if data.provider_key is not None:
+        tool.provider_key = data.provider_key
     if data.is_active is not None:
         tool.is_active = data.is_active
 
@@ -1252,3 +1262,155 @@ def assign_user_role(
         "role_name": role.name
     }
 
+
+
+
+# ====================== TOOL ACCESS REQUESTS ======================
+
+@router.get("/tool-requests", response_model=List[AdminToolAccessRequestResponse])
+def list_tool_requests(
+    status_filter: Optional[str] = None,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    query = (
+        db.query(ToolAccessRequest, Tool, User)
+        .join(Tool, Tool.id == ToolAccessRequest.tool_id)
+        .join(User, User.id == ToolAccessRequest.employee_id)
+    )
+    if status_filter:
+        query = query.filter(ToolAccessRequest.status == status_filter)
+
+    rows = query.order_by(ToolAccessRequest.requested_at.desc()).all()
+
+    return [
+        AdminToolAccessRequestResponse(
+            id=req.id, tool_id=req.tool_id, tool_name=tool.name,
+            identifier=req.identifier, status=req.status, reason=req.reason,
+            requested_at=req.requested_at, reviewed_at=req.reviewed_at,
+            provisioning_message=req.provisioning_message,
+            employee_id=user.id, employee_name=user.full_name, employee_email=user.email
+        )
+        for req, tool, user in rows
+    ]
+
+
+@router.post("/tool-requests/{request_id}/approve", response_model=AdminToolAccessRequestResponse)
+def approve_tool_request(
+    request_id: int,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    req = db.query(ToolAccessRequest).filter(ToolAccessRequest.id == request_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+    if req.status != "pending":
+        raise HTTPException(status_code=400, detail=f"Request is already {req.status}")
+
+    tool = db.query(Tool).filter(Tool.id == req.tool_id).first()
+    employee = db.query(User).filter(User.id == req.employee_id).first()
+    connector = CONNECTORS.get(tool.provider_key) if tool.provider_key else None
+
+    if connector:
+        if not req.identifier:
+            req.status = "failed"
+            req.provisioning_message = f"No identifier provided — {tool.name} requires the employee's account username."
+            db.commit()
+            raise HTTPException(status_code=400, detail=req.provisioning_message)
+        identity = req.identifier
+        try:
+            message = connector.grant_access(identity)
+            req.status = "approved"
+            req.provisioning_message = message
+        except Exception as e:
+            req.status = "failed"
+            req.provisioning_message = str(e)
+            db.commit()
+            raise HTTPException(status_code=502, detail=f"Provisioning failed: {e}")
+    else:
+        req.status = "approved"
+        req.provisioning_message = "Approved manually (no automated connector configured for this tool)"
+
+    req.reviewed_by = current_admin.id
+    req.reviewed_at = datetime.utcnow()
+    db.commit()
+    db.refresh(req)
+
+    return AdminToolAccessRequestResponse(
+        id=req.id, tool_id=req.tool_id, tool_name=tool.name,
+        identifier=req.identifier, status=req.status, reason=req.reason,
+        requested_at=req.requested_at, reviewed_at=req.reviewed_at,
+        provisioning_message=req.provisioning_message,
+        employee_id=employee.id, employee_name=employee.full_name, employee_email=employee.email
+    )
+
+
+@router.post("/tool-requests/{request_id}/reject", response_model=AdminToolAccessRequestResponse)
+def reject_tool_request(
+    request_id: int,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    req = db.query(ToolAccessRequest).filter(ToolAccessRequest.id == request_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+    if req.status != "pending":
+        raise HTTPException(status_code=400, detail=f"Request is already {req.status}")
+
+    tool = db.query(Tool).filter(Tool.id == req.tool_id).first()
+    employee = db.query(User).filter(User.id == req.employee_id).first()
+
+    req.status = "rejected"
+    req.reviewed_by = current_admin.id
+    req.reviewed_at = datetime.utcnow()
+    db.commit()
+    db.refresh(req)
+
+    return AdminToolAccessRequestResponse(
+        id=req.id, tool_id=req.tool_id, tool_name=tool.name,
+        identifier=req.identifier, status=req.status, reason=req.reason,
+        requested_at=req.requested_at, reviewed_at=req.reviewed_at,
+        provisioning_message=req.provisioning_message,
+        employee_id=employee.id, employee_name=employee.full_name, employee_email=employee.email
+    )
+
+@router.post("/tool-requests/{request_id}/revoke", response_model=AdminToolAccessRequestResponse)
+def revoke_tool_request(
+    request_id: int,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    req = db.query(ToolAccessRequest).filter(ToolAccessRequest.id == request_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+    if req.status != "approved":
+        raise HTTPException(status_code=400, detail=f"Only approved requests can be revoked (current status: {req.status})")
+
+    tool = db.query(Tool).filter(Tool.id == req.tool_id).first()
+    employee = db.query(User).filter(User.id == req.employee_id).first()
+    connector = CONNECTORS.get(tool.provider_key) if tool.provider_key else None
+
+    if connector:
+        try:
+            message = connector.revoke_access(req.identifier)
+            req.status = "revoked"
+            req.provisioning_message = message
+        except Exception as e:
+            db.commit()
+            raise HTTPException(status_code=502, detail=f"Revocation failed: {e}")
+    else:
+        req.status = "revoked"
+        req.provisioning_message = "Revoked manually (no automated connector configured for this tool)"
+
+    req.reviewed_by = current_admin.id
+    req.reviewed_at = datetime.utcnow()
+    db.commit()
+    db.refresh(req)
+
+    return AdminToolAccessRequestResponse(
+        id=req.id, tool_id=req.tool_id, tool_name=tool.name,
+        identifier=req.identifier, status=req.status, reason=req.reason,
+        requested_at=req.requested_at, reviewed_at=req.reviewed_at,
+        provisioning_message=req.provisioning_message,
+        employee_id=employee.id, employee_name=employee.full_name, employee_email=employee.email
+    )

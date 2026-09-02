@@ -22,6 +22,7 @@ class Tool(Base):
     category = Column(String, nullable=True)
     request_url = Column(String, nullable=True)
     guide_text = Column(Text, nullable=True)
+    provider_key = Column(String, nullable=True)   # "github" | "jira" | "slack" | None (manual)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -49,3 +50,19 @@ class UserTeam(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     team_id = Column(Integer, ForeignKey("teams.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+
+class ToolAccessRequest(Base):
+    __tablename__ = "tool_access_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    employee_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    tool_id = Column(Integer, ForeignKey("tools.id"), nullable=False)
+    identifier = Column(String, nullable=True)   # e.g. GitHub username
+    status = Column(String, default="pending")   # pending | approved | rejected | failed
+    reason = Column(Text, nullable=True)
+    requested_at = Column(DateTime(timezone=True), server_default=func.now())
+    reviewed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+    provisioning_message = Column(Text, nullable=True)

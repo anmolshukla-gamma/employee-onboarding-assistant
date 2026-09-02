@@ -26,6 +26,7 @@ import AdminDocuments from "./pages/admin/Documents";
 import AdminTeams from "./pages/admin/Teams";
 import AdminTeamDetail from "./pages/admin/TeamDetail";
 import AdminTools from "./pages/admin/Tools";
+import AdminToolRequests from "./pages/admin/ToolRequests";
 import AdminProgress from "./pages/admin/Progress";
 import AdminProgressDetail from "./pages/admin/ProgressDetail";
 import AdminComments from "./pages/admin/Comments";
@@ -96,6 +97,7 @@ export default function App() {
                     <Route path="/admin/teams" element={<AdminTeams />} />
                     <Route path="/admin/teams/:teamId" element={<AdminTeamDetail />} />
                     <Route path="/admin/tools" element={<AdminTools />} />
+                    <Route path="/admin/tool-requests" element={<AdminToolRequests />} />
                     <Route path="/admin/progress" element={<AdminProgress />} />
                     <Route path="/admin/progress/:userId" element={<AdminProgressDetail />} />
                     <Route path="/admin/comments" element={<AdminComments />} />
