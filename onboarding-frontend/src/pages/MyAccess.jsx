@@ -89,7 +89,7 @@ function ToolCard({ tool, request, onRequested }) {
               </button>
             </div>
           )}
-          {tool.request_url && (
+          {/* {tool.request_url && (
             <div style={{ marginTop: 6 }}>
               
                <a href={tool.request_url}
@@ -100,7 +100,7 @@ function ToolCard({ tool, request, onRequested }) {
                 Manual portal <IconExternalLink width={13} height={13} />
               </a>
             </div>
-          )}
+          )} */}
         </div>
       </div>
 

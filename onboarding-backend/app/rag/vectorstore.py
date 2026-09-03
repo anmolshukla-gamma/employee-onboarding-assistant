@@ -10,11 +10,16 @@ embeddings = FastEmbedEmbeddings(
     model_name="sentence-transformers/all-MiniLM-L6-v2"
 )
 
+_vectorstore_instance = None
+
 def get_vectorstore():
-    return Chroma(
-        persist_directory=CHROMA_PATH,
-        embedding_function=embeddings
-    )
+    global _vectorstore_instance
+    if _vectorstore_instance is None:
+        _vectorstore_instance = Chroma(
+            persist_directory=CHROMA_PATH,
+            embedding_function=embeddings
+        )
+    return _vectorstore_instance
 
 def add_documents_to_vectorstore(chunks: list[str], metadata: dict):
     docs = [
