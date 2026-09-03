@@ -87,10 +87,17 @@ def request_tool_access(
     if existing:
         raise HTTPException(status_code=400, detail=f"You already have a {existing.status} request for this tool")
 
+    # Automatically default identifier to employee's profile email if not provided
+    resolved_identifier = (
+        data.identifier.strip()
+        if data.identifier and data.identifier.strip()
+        else current_user.email
+    )
+
     req = ToolAccessRequest(
         employee_id=current_user.id,
         tool_id=data.tool_id,
-        identifier=data.identifier,
+        identifier=resolved_identifier,
         reason=data.reason,
         status="pending"
     )

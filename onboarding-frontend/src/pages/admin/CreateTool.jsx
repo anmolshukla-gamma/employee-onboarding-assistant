@@ -11,6 +11,7 @@ const EMPTY = {
   category: "",
   request_url: "",
   guide_text: "",
+  provider_key: "",
   is_active: true,
 };
 
@@ -42,6 +43,7 @@ export default function CreateTool() {
         category: form.category.trim() || null,
         request_url: form.request_url.trim() || null,
         guide_text: form.guide_text.trim() || null,
+        provider_key: form.provider_key.trim() || null,
         is_active: !!form.is_active,
       });
       toast.success("Tool created successfully.");
@@ -126,6 +128,23 @@ export default function CreateTool() {
                   placeholder="What this tool is used for"
                 />
               </div>
+
+              <div className="field">
+                <label htmlFor="tool_provider">Automated Provisioning (Integration)</label>
+                <select
+                  id="tool_provider"
+                  value={form.provider_key}
+                  onChange={(e) => setField("provider_key", e.target.value)}
+                >
+                  <option value="">None / Manual (External portal or ticket)</option>
+                  <option value="jira">Jira Cloud (Automatic User Invite & Group Access)</option>
+                  <option value="github">GitHub (Automatic Org & Team Invitation)</option>
+                  <option value="aws">AWS (Automatic IAM Console & User Access)</option>
+                </select>
+                <div className="field-hint">
+                  When selected, approving an employee's access request will automatically grant access via API.
+                </div>
+              </div>
             </div>
           </section>
 
@@ -191,6 +210,18 @@ export default function CreateTool() {
             <div className="cu-summary-row">
               <span>Guide</span>
               <strong>{form.guide_text.trim() ? "Added" : "Empty"}</strong>
+            </div>
+            <div className="cu-summary-row">
+              <span>Integration</span>
+              <strong>
+                {form.provider_key === "jira"
+                  ? "Jira (Auto)"
+                  : form.provider_key === "github"
+                  ? "GitHub (Auto)"
+                  : form.provider_key === "aws"
+                  ? "AWS (Auto)"
+                  : "Manual"}
+              </strong>
             </div>
             <div className="cu-summary-row">
               <span>Status</span>

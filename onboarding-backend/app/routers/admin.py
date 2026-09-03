@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from app.core.security import hash_password
 from typing import List, Optional
@@ -36,9 +36,14 @@ from app.schemas.admin import UserRoleAssign
 from app.models.team import ToolAccessRequest
 from app.schemas.team import ToolAccessRequestResponse, AdminToolAccessRequestResponse
 from app.services.github_connector import GitHubConnector
+from app.services.jira_connector import JiraConnector
+from app.services.aws_connector import AwsConnector
+from app.services.email_service import email_service
 
 CONNECTORS = {
     "github": GitHubConnector(),
+    "jira": JiraConnector(),
+    "aws": AwsConnector(),
 }
 import math
 import json
@@ -1298,6 +1303,7 @@ def list_tool_requests(
 @router.post("/tool-requests/{request_id}/approve", response_model=AdminToolAccessRequestResponse)
 def approve_tool_request(
     request_id: int,
+    background_tasks: BackgroundTasks,
     current_admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
@@ -1309,15 +1315,21 @@ def approve_tool_request(
 
     tool = db.query(Tool).filter(Tool.id == req.tool_id).first()
     employee = db.query(User).filter(User.id == req.employee_id).first()
+    if not employee or not employee.is_active:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot approve request: Employee account is deactivated or not found."
+        )
     connector = CONNECTORS.get(tool.provider_key) if tool.provider_key else None
 
     if connector:
-        if not req.identifier:
+        identity = req.identifier.strip() if req.identifier and req.identifier.strip() else employee.email
+        if not identity:
             req.status = "failed"
-            req.provisioning_message = f"No identifier provided — {tool.name} requires the employee's account username."
+            req.provisioning_message = f"No identifier or email found for employee."
             db.commit()
             raise HTTPException(status_code=400, detail=req.provisioning_message)
-        identity = req.identifier
+        req.identifier = identity
         try:
             message = connector.grant_access(identity)
             req.status = "approved"
@@ -1335,6 +1347,18 @@ def approve_tool_request(
     req.reviewed_at = datetime.utcnow()
     db.commit()
     db.refresh(req)
+
+    # Dispatch email notification with credentials in the background
+    # Note: GitHub and Jira send their own official invitation emails directly to the user,
+    # so we only send email for tools that require credentials delivery (like AWS or manual tools).
+    if req.status == "approved" and employee.email and tool.provider_key not in ("github", "jira"):
+        background_tasks.add_task(
+            email_service.send_tool_access_email,
+            to_email=employee.email,
+            employee_name=employee.full_name or employee.email.split("@")[0],
+            tool_name=tool.name,
+            provisioning_message=req.provisioning_message
+        )
 
     return AdminToolAccessRequestResponse(
         id=req.id, tool_id=req.tool_id, tool_name=tool.name,

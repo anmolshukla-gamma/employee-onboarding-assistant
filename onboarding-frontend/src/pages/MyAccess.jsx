@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchMyAccess, fetchMyToolRequests, requestToolAccess } from "../api/access";
+import { useAuth } from "../context/AuthContext";
 import { extractErrorMessage } from "../api/axios";
 import { PageLoading } from "../components/Modal";
 import EmptyState from "../components/EmptyState";
@@ -28,6 +29,7 @@ const STATUS_CLASS = {
 };
 
 function ToolCard({ tool, request, onRequested }) {
+  const { user } = useAuth();
   const [expanded, setExpanded] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [identifier, setIdentifier] = useState("");
@@ -43,7 +45,7 @@ function ToolCard({ tool, request, onRequested }) {
     try {
       await requestToolAccess({
         tool_id: tool.tool_id,
-        identifier: identifier.trim() || null,
+        identifier: identifier.trim() || user?.email || null,
         reason: reason.trim() || null,
       });
       setShowForm(false);
@@ -104,20 +106,35 @@ function ToolCard({ tool, request, onRequested }) {
 
       {showForm && (!request || request.status === "failed" || request.status === "rejected" || request.status === "revoked") && (
         <form onSubmit={handleSubmit} className="drawer-guide" style={{ marginTop: 12 }}>
-                    <div className="field" style={{ marginBottom: 10 }}>
-            <label className="text-muted" style={{ fontSize: 12, display: "block", marginBottom: 4 }}>
-              {tool.provider_key === "github"
-                ? "Your GitHub username, or your email if you don't have a GitHub account yet"
-                : "Your account username or email for this tool (if applicable)"}
-            </label>
-            <input
-              className="input"
-              style={{ width: "100%" }}
-              value={identifier}
-              onChange={(e) => setIdentifier(e.target.value)}
-              placeholder="Optional"
-            />
-          </div>
+          {(tool.provider_key === "jira" || tool.provider_key === "aws") ? (
+            <div style={{ marginBottom: 12, padding: "8px 12px", background: "rgba(37, 99, 235, 0.06)", borderLeft: "3px solid #2563eb", borderRadius: 4, fontSize: 12.5, color: "#1e293b" }}>
+              📧 Account Email: <strong>{user?.email}</strong> <span style={{ color: "#64748b" }}>(automatically linked from your profile)</span>
+            </div>
+          ) : (
+            <div className="field" style={{ marginBottom: 10 }}>
+              <label className="text-muted" style={{ fontSize: 12, display: "block", marginBottom: 4 }}>
+                {tool.provider_key === "github"
+                  ? "GitHub Username (optional)"
+                  : "Account username or identifier (optional)"}
+              </label>
+              <input
+                className="input"
+                style={{ width: "100%" }}
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
+                placeholder={
+                  tool.provider_key === "github"
+                    ? `Leave blank to invite profile email (${user?.email || "your email"})`
+                    : `Leave blank to use profile email (${user?.email || "your email"})`
+                }
+              />
+              {tool.provider_key === "github" && (
+                <div style={{ fontSize: 11, color: "#64748b", marginTop: 4, lineHeight: 1.4 }}>
+                  💡 If you have a GitHub account, enter your username for direct team access. Otherwise, leave blank to invite <strong>{user?.email}</strong>.
+                </div>
+              )}
+            </div>
+          )}
                     <div className="field" style={{ marginBottom: 12 }}>
             <label className="text-muted" style={{ fontSize: 12, display: "block", marginBottom: 4 }}>
               Reason (optional)

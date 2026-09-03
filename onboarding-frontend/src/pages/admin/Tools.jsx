@@ -124,7 +124,18 @@ export default function Tools() {
                 {tools.map((t) => (
                   <tr key={t.id}>
                     <td>
-                      <div className="cell-name">{t.name}</div>
+                      <div className="cell-name" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        {t.name}
+                        {t.provider_key === "jira" && (
+                          <span className="badge badge-info" style={{ fontSize: 11, padding: "2px 6px" }}>Jira (Auto)</span>
+                        )}
+                        {t.provider_key === "github" && (
+                          <span className="badge badge-info" style={{ fontSize: 11, padding: "2px 6px" }}>GitHub (Auto)</span>
+                        )}
+                        {t.provider_key === "aws" && (
+                          <span className="badge badge-info" style={{ fontSize: 11, padding: "2px 6px" }}>AWS (Auto)</span>
+                        )}
+                      </div>
                       {t.description && <div className="cell-muted">{t.description}</div>}
                     </td>
                     <td className="cell-muted">{t.category || "—"}</td>

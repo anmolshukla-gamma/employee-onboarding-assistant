@@ -19,6 +19,7 @@ export default function EditTool() {
     category: "",
     request_url: "",
     guide_text: "",
+    provider_key: "",
     is_active: true,
   });
 
@@ -39,6 +40,7 @@ export default function EditTool() {
           category: tool.category || "",
           request_url: tool.request_url || "",
           guide_text: tool.guide_text || "",
+          provider_key: tool.provider_key || "",
           is_active: tool.is_active !== false,
         });
       })
@@ -74,6 +76,7 @@ export default function EditTool() {
         category: form.category.trim() || null,
         request_url: form.request_url.trim() || null,
         guide_text: form.guide_text.trim() || null,
+        provider_key: form.provider_key.trim() || null,
         is_active: !!form.is_active,
       });
       toast.success("Tool updated.");
@@ -117,6 +120,18 @@ export default function EditTool() {
         <div className="et-metric">
           <span className="et-metric-label">Category</span>
           <strong style={{ fontSize: 15 }}>{form.category.trim() || "General"}</strong>
+        </div>
+        <div className="et-metric">
+          <span className="et-metric-label">Integration</span>
+          <strong style={{ fontSize: 15 }}>
+            {form.provider_key === "jira"
+              ? "Jira (Auto)"
+              : form.provider_key === "github"
+              ? "GitHub (Auto)"
+              : form.provider_key === "aws"
+              ? "AWS (Auto)"
+              : "Manual"}
+          </strong>
         </div>
         <div className="et-metric">
           <span className="et-metric-label">Request URL</span>
@@ -175,6 +190,23 @@ export default function EditTool() {
               value={form.description}
               onChange={(e) => setField("description", e.target.value)}
             />
+          </div>
+
+          <div className="field">
+            <label htmlFor="edit_tool_provider">Automated Provisioning (Integration)</label>
+            <select
+              id="edit_tool_provider"
+              value={form.provider_key}
+              onChange={(e) => setField("provider_key", e.target.value)}
+            >
+              <option value="">None / Manual (External portal or ticket)</option>
+              <option value="jira">Jira Cloud (Automatic User Invite & Group Access)</option>
+              <option value="github">GitHub (Automatic Org & Team Invitation)</option>
+              <option value="aws">AWS (Automatic IAM Console & User Access)</option>
+            </select>
+            <div className="field-hint">
+              When selected, approving an employee's access request will automatically grant access via API.
+            </div>
           </div>
 
           <div className="field">
