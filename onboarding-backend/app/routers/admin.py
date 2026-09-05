@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 from app.core.security import hash_password
 from typing import List, Optional
 from app.models.team import Team, Tool, TeamTool, UserTeam
@@ -1272,6 +1273,33 @@ def assign_user_role(
 
 # ====================== TOOL ACCESS REQUESTS ======================
 
+class ApproveToolAccessPayload(BaseModel):
+    aws_group: Optional[str] = None
+    policy_arns: Optional[List[str]] = None
+
+
+@router.get("/aws/groups")
+def get_aws_groups(current_admin: User = Depends(get_current_admin)):
+    aws_conn = CONNECTORS.get("aws")
+    if not aws_conn:
+        return []
+    try:
+        return aws_conn.list_groups()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch AWS groups: {e}")
+
+
+@router.get("/aws/policies")
+def get_aws_policies(current_admin: User = Depends(get_current_admin)):
+    aws_conn = CONNECTORS.get("aws")
+    if not aws_conn:
+        return []
+    try:
+        return aws_conn.list_common_policies()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch AWS policies: {e}")
+
+
 @router.get("/tool-requests", response_model=List[AdminToolAccessRequestResponse])
 def list_tool_requests(
     status_filter: Optional[str] = None,
@@ -1288,22 +1316,40 @@ def list_tool_requests(
 
     rows = query.order_by(ToolAccessRequest.requested_at.desc()).all()
 
-    return [
-        AdminToolAccessRequestResponse(
-            id=req.id, tool_id=req.tool_id, tool_name=tool.name,
-            identifier=req.identifier, status=req.status, reason=req.reason,
-            requested_at=req.requested_at, reviewed_at=req.reviewed_at,
-            provisioning_message=req.provisioning_message,
-            employee_id=user.id, employee_name=user.full_name, employee_email=user.email
+    items = []
+    for req, tool, user in rows:
+        role_name = None
+        if user.role_id:
+            role_obj = db.query(Role).filter(Role.id == user.role_id).first()
+            role_name = role_obj.name if role_obj else None
+
+        user_team = db.query(UserTeam).filter(UserTeam.user_id == user.id).first()
+        team_name = None
+        if user_team:
+            team_obj = db.query(Team).filter(Team.id == user_team.team_id).first()
+            team_name = team_obj.name if team_obj else None
+
+        items.append(
+            AdminToolAccessRequestResponse(
+                id=req.id, tool_id=req.tool_id, tool_name=tool.name,
+                identifier=req.identifier, status=req.status, reason=req.reason,
+                requested_at=req.requested_at, reviewed_at=req.reviewed_at,
+                provisioning_message=req.provisioning_message,
+                employee_id=user.id, employee_name=user.full_name, employee_email=user.email,
+                provider_key=tool.provider_key,
+                employee_role=role_name,
+                employee_team=team_name
+            )
         )
-        for req, tool, user in rows
-    ]
+
+    return items
 
 
 @router.post("/tool-requests/{request_id}/approve", response_model=AdminToolAccessRequestResponse)
 def approve_tool_request(
     request_id: int,
     background_tasks: BackgroundTasks,
+    payload: Optional[ApproveToolAccessPayload] = None,
     current_admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
@@ -1331,7 +1377,14 @@ def approve_tool_request(
             raise HTTPException(status_code=400, detail=req.provisioning_message)
         req.identifier = identity
         try:
-            message = connector.grant_access(identity)
+            if tool.provider_key == "aws" and payload:
+                message = connector.grant_access(
+                    identity,
+                    group_name=payload.aws_group,
+                    policy_arns=payload.policy_arns
+                )
+            else:
+                message = connector.grant_access(identity)
             req.status = "approved"
             req.provisioning_message = message
         except Exception as e:
@@ -1349,8 +1402,6 @@ def approve_tool_request(
     db.refresh(req)
 
     # Dispatch email notification with credentials in the background
-    # Note: GitHub and Jira send their own official invitation emails directly to the user,
-    # so we only send email for tools that require credentials delivery (like AWS or manual tools).
     if req.status == "approved" and employee.email and tool.provider_key not in ("github", "jira"):
         background_tasks.add_task(
             email_service.send_tool_access_email,
@@ -1360,12 +1411,27 @@ def approve_tool_request(
             provisioning_message=req.provisioning_message
         )
 
+    # Resolve role and team for response
+    role_name = None
+    if employee.role_id:
+        role_obj = db.query(Role).filter(Role.id == employee.role_id).first()
+        role_name = role_obj.name if role_obj else None
+
+    user_team = db.query(UserTeam).filter(UserTeam.user_id == employee.id).first()
+    team_name = None
+    if user_team:
+        team_obj = db.query(Team).filter(Team.id == user_team.team_id).first()
+        team_name = team_obj.name if team_obj else None
+
     return AdminToolAccessRequestResponse(
         id=req.id, tool_id=req.tool_id, tool_name=tool.name,
         identifier=req.identifier, status=req.status, reason=req.reason,
         requested_at=req.requested_at, reviewed_at=req.reviewed_at,
         provisioning_message=req.provisioning_message,
-        employee_id=employee.id, employee_name=employee.full_name, employee_email=employee.email
+        employee_id=employee.id, employee_name=employee.full_name, employee_email=employee.email,
+        provider_key=tool.provider_key,
+        employee_role=role_name,
+        employee_team=team_name
     )
 
 

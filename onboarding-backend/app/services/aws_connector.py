@@ -84,9 +84,72 @@ class AwsConnector:
 
         return "https://console.aws.amazon.com"
 
-    def grant_access(self, identifier: str) -> str:
+    def list_groups(self) -> list[dict]:
+        """Returns all IAM groups available in the AWS account along with their attached policies."""
+        self._check_configured()
+        iam = self._get_iam_client()
+        try:
+            resp = iam.list_groups()
+            result = []
+            for g in resp.get("Groups", []):
+                g_name = g["GroupName"]
+                attached = []
+                try:
+                    p_resp = iam.list_attached_group_policies(GroupName=g_name)
+                    attached = [
+                        {"name": p["PolicyName"], "arn": p["PolicyArn"]}
+                        for p in p_resp.get("AttachedPolicies", [])
+                    ]
+                except Exception as pe:
+                    logger.warning(f"Could not list attached policies for group {g_name}: {pe}")
+
+                result.append({
+                    "name": g_name,
+                    "arn": g["Arn"],
+                    "attached_policies": attached,
+                    "created_at": g.get("CreateDate").isoformat() if g.get("CreateDate") else None
+                })
+            return result
+        except Exception as e:
+            raise RuntimeError(f"AWS API error listing IAM groups: {e}")
+
+    def list_common_policies(self) -> list[dict]:
+        """Returns standard common AWS managed policies plus any customer managed policies."""
+        self._check_configured()
+        iam = self._get_iam_client()
+
+        curated = [
+            {"name": "ReadOnlyAccess", "arn": "arn:aws:iam::aws:policy/ReadOnlyAccess", "description": "Read-only access to all AWS services and resources."},
+            {"name": "AmazonS3ReadOnlyAccess", "arn": "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess", "description": "Read-only access to all S3 buckets and objects."},
+            {"name": "AmazonS3FullAccess", "arn": "arn:aws:iam::aws:policy/AmazonS3FullAccess", "description": "Full access to Amazon S3 resources."},
+            {"name": "AmazonEC2ReadOnlyAccess", "arn": "arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess", "description": "Read-only access to EC2 instances and networking."},
+            {"name": "PowerUserAccess", "arn": "arn:aws:iam::aws:policy/PowerUserAccess", "description": "Full access to AWS services, excluding IAM user/group management."},
+            {"name": "AWSCloudFormationReadOnlyAccess", "arn": "arn:aws:iam::aws:policy/AWSCloudFormationReadOnlyAccess", "description": "Read-only access to CloudFormation stacks and templates."},
+            {"name": "AmazonRDSReadOnlyAccess", "arn": "arn:aws:iam::aws:policy/AmazonRDSReadOnlyAccess", "description": "Read-only access to Amazon RDS databases and clusters."},
+            {"name": "CloudWatchReadOnlyAccess", "arn": "arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess", "description": "Read-only access to CloudWatch logs, metrics, and alarms."},
+        ]
+
+        try:
+            local_resp = iam.list_policies(Scope="Local", MaxItems=50)
+            for p in local_resp.get("Policies", []):
+                curated.append({
+                    "name": p["PolicyName"],
+                    "arn": p["Arn"],
+                    "description": p.get("Description") or "Customer Managed Policy"
+                })
+        except Exception as e:
+            logger.warning(f"Could not list customer managed policies: {e}")
+
+        return curated
+
+    def grant_access(
+        self,
+        identifier: str,
+        group_name: Optional[str] = None,
+        policy_arns: Optional[list[str]] = None
+    ) -> str:
         """Creates an AWS IAM user, generates a temporary console password (requiring change on first login),
-        and assigns them to the default IAM group.
+        and assigns them to the specified IAM group and policies.
         """
         self._check_configured()
         username = self._sanitize_username(identifier)
@@ -138,31 +201,53 @@ class AwsConnector:
             except Exception as e:
                 raise RuntimeError(f"AWS API error creating login profile for '{username}': {e}")
 
-        # 3. Add to default group if configured
-        group_note = ""
-        if self.default_group and self.default_group.strip():
-            group_name = self.default_group.strip()
-            try:
-                iam.add_user_to_group(GroupName=group_name, UserName=username)
-                group_note = f" (Group: {group_name})"
-            except Exception as e:
-                # If group doesn't exist or user already in it, continue
-                if "LimitExceeded" in str(e) or "Conflict" in str(e):
-                    group_note = f" (Group: {group_name})"
-                else:
-                    group_note = f" (Note: Group '{group_name}' assignment skipped: {e})"
+        # Ensure IAMUserChangePassword policy is attached so user can change password on first login
+        try:
+            iam.attach_user_policy(
+                UserName=username,
+                PolicyArn="arn:aws:iam::aws:policy/IAMUserChangePassword"
+            )
+        except Exception:
+            pass
 
+        # 3. Add to specified group or default group
+        target_group = (group_name or self.default_group or "").strip()
+        group_note = ""
+        if target_group:
+            try:
+                iam.add_user_to_group(GroupName=target_group, UserName=username)
+                group_note = f" (Group: {target_group})"
+            except Exception as e:
+                if "LimitExceeded" in str(e) or "Conflict" in str(e):
+                    group_note = f" (Group: {target_group})"
+                else:
+                    group_note = f" (Note: Group '{target_group}' assignment skipped: {e})"
+
+        # 4. Attach extra policies if specified
+        attached_policies = []
+        if policy_arns:
+            for arn in policy_arns:
+                clean_arn = arn.strip() if isinstance(arn, str) else ""
+                if clean_arn and clean_arn.startswith("arn:aws:iam:"):
+                    try:
+                        iam.attach_user_policy(UserName=username, PolicyArn=clean_arn)
+                        p_name = clean_arn.split("/")[-1]
+                        attached_policies.append(p_name)
+                    except Exception as pe:
+                        logger.warning(f"Failed to attach policy {clean_arn} to {username}: {pe}")
+
+        policies_note = f" (Policies: {', '.join(attached_policies)})" if attached_policies else ""
         console_url = self._get_console_signin_url()
 
         if temp_password:
             return (
-                f"Created AWS IAM user '{username}'{group_note}. "
+                f"Created AWS IAM user '{username}'{group_note}{policies_note}. "
                 f"Console Login URL: {console_url} | Temporary Password: {temp_password} "
                 f"(Password change required on first sign-in)"
             )
         else:
             return (
-                f"AWS IAM user '{username}' already exists{group_note}. "
+                f"AWS IAM user '{username}' already exists{group_note}{policies_note}. "
                 f"Console Login URL: {console_url}"
             )
 

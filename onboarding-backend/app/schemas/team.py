@@ -147,3 +147,6 @@ class AdminToolAccessRequestResponse(ToolAccessRequestResponse):
     employee_id: int
     employee_name: str
     employee_email: str
+    provider_key: Optional[str] = None
+    employee_role: Optional[str] = None
+    employee_team: Optional[str] = None

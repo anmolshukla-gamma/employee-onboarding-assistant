@@ -63,9 +63,14 @@ export const deleteAdminTool = (id) => api.delete(`/admin/tools/${id}`);
 // ---- Tool Access Requests ----
 export const fetchToolRequests = (statusFilter) =>
   api.get("/admin/tool-requests", { params: statusFilter ? { status_filter: statusFilter } : {} });
-export const approveToolRequest = (id) => api.post(`/admin/tool-requests/${id}/approve`);
+export const approveToolRequest = (id, payload) =>
+  api.post(`/admin/tool-requests/${id}/approve`, payload || {});
 export const rejectToolRequest = (id) => api.post(`/admin/tool-requests/${id}/reject`);
 export const revokeToolRequest = (id) => api.post(`/admin/tool-requests/${id}/revoke`);
+
+// ---- AWS IAM Discovery ----
+export const fetchAwsGroups = () => api.get("/admin/aws/groups");
+export const fetchAwsPolicies = () => api.get("/admin/aws/policies");
 
 // ---- Team <-> Tool mapping ----
 export const fetchTeamTools = (teamId) => api.get(`/admin/teams/${teamId}/tools`);
