@@ -513,7 +513,7 @@ function GitHubApprovalModal({ request, onClose, onConfirm, loading }) {
                     fontWeight: 600,
                   }}
                 >
-                  🎯 Auto-selected for {request.employee_team}
+                  Auto-selected for {request.employee_team}
                 </span>
               )}
             </div>
@@ -698,7 +698,7 @@ function JiraApprovalModal({ request, onClose, onConfirm, loading }) {
                     fontWeight: 600,
                   }}
                 >
-                  🎯 Auto-selected for {request.employee_team}
+                  Auto-selected for {request.employee_team}
                 </span>
               )}
             </div>
