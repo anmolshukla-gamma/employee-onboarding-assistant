@@ -72,6 +72,13 @@ export const revokeToolRequest = (id) => api.post(`/admin/tool-requests/${id}/re
 export const fetchAwsGroups = () => api.get("/admin/aws/groups");
 export const fetchAwsPolicies = () => api.get("/admin/aws/policies");
 
+// ---- GitHub Discovery ----
+export const fetchGithubTeams = () => api.get("/admin/github/teams");
+
+// ---- Jira Discovery ----
+export const fetchJiraGroups = () => api.get("/admin/jira/groups");
+export const fetchJiraProjects = () => api.get("/admin/jira/projects");
+
 // ---- Team <-> Tool mapping ----
 export const fetchTeamTools = (teamId) => api.get(`/admin/teams/${teamId}/tools`);
 export const addToolToTeam = (teamId, payload) =>

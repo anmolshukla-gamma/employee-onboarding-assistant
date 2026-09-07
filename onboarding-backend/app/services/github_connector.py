@@ -57,12 +57,36 @@ class GitHubConnector:
             logger.warning(f"Error resolving username by email {email}: {e}")
         return None
 
-    def grant_access(self, identifier: str) -> str:
+    def list_teams(self) -> list[dict]:
+        """Returns all teams in the GitHub organization."""
+        self._check_configured()
+        url = f"{GITHUB_API}/orgs/{self.org}/teams"
+        resp = requests.get(url, headers=self._headers())
+        if resp.status_code != 200:
+            raise RuntimeError(f"GitHub API error listing teams ({resp.status_code}): {resp.text}")
+        return [
+            {
+                "id": t["id"],
+                "name": t["name"],
+                "slug": t["slug"],
+                "description": t.get("description") or "",
+            }
+            for t in resp.json()
+        ]
+
+    def grant_access(
+        self,
+        identifier: str,
+        team_slug: Optional[str] = None,
+        role: Optional[str] = None
+    ) -> str:
         self._check_configured()
         identifier = identifier.strip()
+        active_team_slug = team_slug.strip() if team_slug and team_slug.strip() else self.team_slug
+        active_role = role.strip() if role and role.strip() in ("member", "maintainer") else "member"
 
         if "@" in identifier:
-            team = self._get_team_id()
+            team = self._get_team_id(active_team_slug)
             url = f"{GITHUB_API}/orgs/{self.org}/invitations"
             resp = requests.post(
                 url,
@@ -74,32 +98,32 @@ class GitHubConnector:
                 },
             )
             if resp.status_code in (200, 201):
-                return f"Invited '{identifier}' by email to org '{self.org}' (team: {self.team_slug})"
+                return f"Invited '{identifier}' by email to org '{self.org}' (team: {active_team_slug}, role: {active_role})"
 
             # If user is already a member of the organization
             if resp.status_code == 422 and "already a part of this organization" in resp.text:
                 resolved_username = self._resolve_username_by_email(identifier)
                 if resolved_username:
                     team_resp = requests.put(
-                        f"{GITHUB_API}/orgs/{self.org}/teams/{self.team_slug}/memberships/{resolved_username}",
+                        f"{GITHUB_API}/orgs/{self.org}/teams/{active_team_slug}/memberships/{resolved_username}",
                         headers=self._headers(),
-                        json={"role": "member"},
+                        json={"role": active_role},
                     )
                     if team_resp.status_code in (200, 201):
                         return (
                             f"User '{identifier}' is already in org '{self.org}'. "
-                            f"Added GitHub username '{resolved_username}' directly to team '{self.team_slug}'."
+                            f"Added GitHub username '{resolved_username}' directly to team '{active_team_slug}' ({active_role})."
                         )
 
                 raise RuntimeError(
                     f"User with email '{identifier}' is already an active member of GitHub organization '{self.org}'. "
-                    f"To assign them to the team '{self.team_slug}', please submit the request using their GitHub username."
+                    f"To assign them to the team '{active_team_slug}', please submit the request using their GitHub username."
                 )
 
             raise RuntimeError(f"GitHub API error ({resp.status_code}): {resp.text}")
         else:
-            url = f"{GITHUB_API}/orgs/{self.org}/teams/{self.team_slug}/memberships/{identifier}"
-            resp = requests.put(url, headers=self._headers(), json={"role": "member"})
+            url = f"{GITHUB_API}/orgs/{self.org}/teams/{active_team_slug}/memberships/{identifier}"
+            resp = requests.put(url, headers=self._headers(), json={"role": active_role})
 
             if resp.status_code == 404:
                 raise RuntimeError(
@@ -110,13 +134,14 @@ class GitHubConnector:
                 raise RuntimeError(f"GitHub API error ({resp.status_code}): {resp.text}")
 
             data = resp.json()
-            return f"Added '{identifier}' to team '{self.team_slug}' (state: {data.get('state', 'unknown')})"
+            return f"Added '{identifier}' to team '{active_team_slug}' as {active_role} (state: {data.get('state', 'unknown')})"
 
-    def _get_team_id(self) -> int:
-        url = f"{GITHUB_API}/orgs/{self.org}/teams/{self.team_slug}"
+    def _get_team_id(self, team_slug: Optional[str] = None) -> int:
+        slug = team_slug or self.team_slug
+        url = f"{GITHUB_API}/orgs/{self.org}/teams/{slug}"
         resp = requests.get(url, headers=self._headers())
         if resp.status_code != 200:
-            raise RuntimeError(f"Could not resolve team id: {resp.text}")
+            raise RuntimeError(f"Could not resolve team id for '{slug}': {resp.text}")
         return resp.json()["id"]
 
     def _remove_user_from_org(self, username: str) -> str:

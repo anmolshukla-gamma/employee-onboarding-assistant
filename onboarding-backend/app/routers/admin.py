@@ -321,6 +321,34 @@ def get_admin_stats(
             "checklist_item_title": item.title if item else None
         })
 
+    # Tool access requests stats
+    pending_tool_requests = db.query(ToolAccessRequest).filter(
+        ToolAccessRequest.status == "pending"
+    ).count()
+
+    recent_tool_rows = (
+        db.query(ToolAccessRequest, Tool, User)
+        .join(Tool, Tool.id == ToolAccessRequest.tool_id)
+        .join(User, User.id == ToolAccessRequest.employee_id)
+        .order_by(ToolAccessRequest.requested_at.desc())
+        .limit(5)
+        .all()
+    )
+    recent_tool_requests = [
+        {
+            "id": req.id,
+            "tool_id": req.tool_id,
+            "tool_name": tool.name,
+            "provider_key": tool.provider_key,
+            "employee_id": user.id,
+            "employee_name": user.full_name,
+            "employee_email": user.email,
+            "status": req.status,
+            "requested_at": req.requested_at
+        }
+        for req, tool, user in recent_tool_rows
+    ]
+
     return {
         "total_users": total_users,
         "total_admins": total_admins,
@@ -337,7 +365,9 @@ def get_admin_stats(
         "users_lagging": len(lagging_users_all),
         "average_progress": average_progress,
         "lagging_users": lagging_users,
-        "pending_feedback": pending_feedback
+        "pending_feedback": pending_feedback,
+        "pending_tool_requests": pending_tool_requests,
+        "recent_tool_requests": recent_tool_requests
     }
 
 # ====================== ROLES ======================
@@ -1276,6 +1306,10 @@ def assign_user_role(
 class ApproveToolAccessPayload(BaseModel):
     aws_group: Optional[str] = None
     policy_arns: Optional[List[str]] = None
+    github_team_slug: Optional[str] = None
+    github_role: Optional[str] = None
+    jira_group: Optional[str] = None
+    jira_project_keys: Optional[List[str]] = None
 
 
 @router.get("/aws/groups")
@@ -1298,6 +1332,39 @@ def get_aws_policies(current_admin: User = Depends(get_current_admin)):
         return aws_conn.list_common_policies()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch AWS policies: {e}")
+
+
+@router.get("/github/teams")
+def get_github_teams(current_admin: User = Depends(get_current_admin)):
+    gh_conn = CONNECTORS.get("github")
+    if not gh_conn:
+        return []
+    try:
+        return gh_conn.list_teams()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch GitHub teams: {e}")
+
+
+@router.get("/jira/groups")
+def get_jira_groups(current_admin: User = Depends(get_current_admin)):
+    jira_conn = CONNECTORS.get("jira")
+    if not jira_conn:
+        return []
+    try:
+        return jira_conn.list_groups()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch Jira groups: {e}")
+
+
+@router.get("/jira/projects")
+def get_jira_projects(current_admin: User = Depends(get_current_admin)):
+    jira_conn = CONNECTORS.get("jira")
+    if not jira_conn:
+        return []
+    try:
+        return jira_conn.list_projects()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch Jira projects: {e}")
 
 
 @router.get("/tool-requests", response_model=List[AdminToolAccessRequestResponse])
@@ -1382,6 +1449,18 @@ def approve_tool_request(
                     identity,
                     group_name=payload.aws_group,
                     policy_arns=payload.policy_arns
+                )
+            elif tool.provider_key == "github" and payload:
+                message = connector.grant_access(
+                    identity,
+                    team_slug=payload.github_team_slug,
+                    role=payload.github_role
+                )
+            elif tool.provider_key == "jira" and payload:
+                message = connector.grant_access(
+                    identity,
+                    group_name=payload.jira_group,
+                    project_keys=payload.jira_project_keys
                 )
             else:
                 message = connector.grant_access(identity)

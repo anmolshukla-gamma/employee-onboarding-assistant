@@ -24,3 +24,7 @@ export function updateProfile({ full_name }) {
 export function changePassword({ current_password, new_password }) {
   return api.post("/auth/change-password", { current_password, new_password });
 }
+
+export function refreshAccessToken({ refresh_token }) {
+  return api.post("/auth/refresh", { refresh_token });
+}

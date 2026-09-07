@@ -6,6 +6,8 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 1
     GITHUB_TOKEN: Optional[str] = None
     GITHUB_ORG: Optional[str] = None
     GITHUB_TEAM_SLUG: Optional[str] = None

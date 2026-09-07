@@ -17,6 +17,7 @@ export function AuthProvider({ children }) {
       setUser(null);
       setToken(null);
       localStorage.removeItem("access_token");
+      localStorage.removeItem("refresh_token");
       throw err;
     }
   }, []);
@@ -33,6 +34,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const onUnauthorized = () => {
       localStorage.removeItem("access_token");
+      localStorage.removeItem("refresh_token");
       setToken(null);
       setUser(null);
     };
@@ -44,6 +46,9 @@ export function AuthProvider({ children }) {
     async ({ email, password }) => {
       const { data } = await loginRequest({ email, password });
       localStorage.setItem("access_token", data.access_token);
+      if (data.refresh_token) {
+        localStorage.setItem("refresh_token", data.refresh_token);
+      }
       setToken(data.access_token);
       const me = await loadMe();
       return me;
@@ -53,6 +58,7 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(() => {
     localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
     setToken(null);
     setUser(null);
   }, []);

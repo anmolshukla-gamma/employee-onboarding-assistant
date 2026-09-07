@@ -12,6 +12,9 @@ import {
   revokeToolRequest,
   fetchAwsGroups,
   fetchAwsPolicies,
+  fetchGithubTeams,
+  fetchJiraGroups,
+  fetchJiraProjects,
 } from "../../api/admin";
 
 const FILTERS = [
@@ -400,6 +403,392 @@ function AwsApprovalModal({ request, onClose, onConfirm, loading }) {
   );
 }
 
+function GitHubApprovalModal({ request, onClose, onConfirm, loading }) {
+  const [teams, setTeams] = useState([]);
+  const [loadingData, setLoadingData] = useState(true);
+  const [selectedTeam, setSelectedTeam] = useState("");
+  const [selectedRole, setSelectedRole] = useState("member");
+  const [isAutoMatched, setIsAutoMatched] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    fetchGithubTeams()
+      .then(({ data }) => {
+        if (!active) return;
+        const tList = Array.isArray(data) ? data : [];
+        setTeams(tList);
+        const matched = findMatchingGroup(tList, request.employee_team);
+        setSelectedTeam(matched || (tList[0] ? tList[0].slug : "developers"));
+        setIsAutoMatched(true);
+      })
+      .catch((err) => console.warn("Failed to load GitHub teams", err))
+      .finally(() => {
+        if (active) setLoadingData(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [request.employee_team]);
+
+  return (
+    <Modal
+      title={`Configure GitHub Access — ${request.employee_name}`}
+      onClose={onClose}
+      width={560}
+      footer={
+        <>
+          <button className="btn btn-secondary" onClick={onClose} disabled={loading}>
+            Cancel
+          </button>
+          <LoadingButton
+            className="btn btn-primary"
+            loading={loading}
+            onClick={() =>
+              onConfirm({
+                github_team_slug: selectedTeam,
+                github_role: selectedRole,
+              })
+            }
+          >
+            Confirm & Add to GitHub
+          </LoadingButton>
+        </>
+      }
+    >
+      {/* 1. Employee Context Grid */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: "10px 16px",
+          padding: "12px 16px",
+          background: "rgba(37, 99, 235, 0.04)",
+          borderRadius: 8,
+          marginBottom: 18,
+          border: "1px solid rgba(37, 99, 235, 0.12)",
+          fontSize: 12.8,
+        }}
+      >
+        <div>
+          <span style={{ color: "#64748b", display: "block", fontSize: 11, marginBottom: 2 }}>EMPLOYEE</span>
+          <strong style={{ color: "#0f172a", fontSize: 13.5 }}>{request.employee_name}</strong>
+        </div>
+        <div>
+          <span style={{ color: "#64748b", display: "block", fontSize: 11, marginBottom: 2 }}>IDENTIFIER</span>
+          <span style={{ color: "#0f172a", fontFamily: "var(--font-mono, monospace)", fontSize: 12.5 }}>
+            {request.identifier || request.employee_email}
+          </span>
+        </div>
+        <div>
+          <span style={{ color: "#64748b", display: "block", fontSize: 11, marginBottom: 2 }}>ASSIGNED TEAM</span>
+          <span style={{ fontWeight: 600, color: "#1e293b" }}>{request.employee_team || "Engineering Team"}</span>
+        </div>
+        <div>
+          <span style={{ color: "#64748b", display: "block", fontSize: 11, marginBottom: 2 }}>ROLE</span>
+          <span style={{ fontWeight: 600, color: "#1e293b" }}>{request.employee_role || "Software Engineer"}</span>
+        </div>
+      </div>
+
+      {loadingData ? (
+        <div style={{ textAlign: "center", padding: "32px 0", color: "#64748b" }}>
+          <span className="spinner spinner-dark" style={{ width: 22, height: 22, display: "inline-block", marginBottom: 10 }} />
+          <div style={{ fontSize: 13 }}>Loading live GitHub Teams...</div>
+        </div>
+      ) : (
+        <>
+          {/* Target GitHub Team */}
+          <div className="field" style={{ marginBottom: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+              <label style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>
+                Target GitHub Team
+              </label>
+              {request.employee_team && isAutoMatched && (
+                <span
+                  style={{
+                    fontSize: 11,
+                    background: "rgba(16, 185, 129, 0.1)",
+                    color: "#059669",
+                    padding: "2px 8px",
+                    borderRadius: 4,
+                    fontWeight: 600,
+                  }}
+                >
+                  🎯 Auto-selected for {request.employee_team}
+                </span>
+              )}
+            </div>
+            <select
+              className="input"
+              style={{ width: "100%", height: 38, fontSize: 13.5 }}
+              value={selectedTeam}
+              onChange={(e) => {
+                setSelectedTeam(e.target.value);
+                setIsAutoMatched(false);
+              }}
+            >
+              {teams.map((t) => (
+                <option key={t.slug} value={t.slug}>
+                  {t.name} (@{t.slug})
+                </option>
+              ))}
+              {teams.length === 0 && (
+                <option value="developers">developers (Default)</option>
+              )}
+            </select>
+            <div style={{ fontSize: 11.5, color: "#64748b", marginTop: 4 }}>
+              The employee will automatically receive all repository permissions granted to this team.
+            </div>
+          </div>
+
+          {/* GitHub Team Role */}
+          <div className="field" style={{ marginBottom: 10 }}>
+            <label style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", display: "block", marginBottom: 6 }}>
+              Team Role
+            </label>
+            <select
+              className="input"
+              style={{ width: "100%", height: 38, fontSize: 13.5 }}
+              value={selectedRole}
+              onChange={(e) => setSelectedRole(e.target.value)}
+            >
+              <option value="member">Member (Standard contributor access)</option>
+              <option value="maintainer">Maintainer (Can manage team membership and settings)</option>
+            </select>
+          </div>
+        </>
+      )}
+    </Modal>
+  );
+}
+
+function JiraApprovalModal({ request, onClose, onConfirm, loading }) {
+  const [groups, setGroups] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [loadingData, setLoadingData] = useState(true);
+  const [selectedGroup, setSelectedGroup] = useState("");
+  const [selectedProjects, setSelectedProjects] = useState([]);
+  const [isAutoMatched, setIsAutoMatched] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([fetchJiraGroups(), fetchJiraProjects()])
+      .then(([gRes, pRes]) => {
+        if (!active) return;
+        const gList = Array.isArray(gRes.data) ? gRes.data : [];
+        const pList = Array.isArray(pRes.data) ? pRes.data : [];
+        setGroups(gList);
+        setProjects(pList);
+
+        // Auto-select group
+        const matchedGroup = findMatchingGroup(gList, request.employee_team);
+        setSelectedGroup(matchedGroup || (gList[0] ? gList[0].name : "jira-software-users"));
+        setIsAutoMatched(true);
+
+        // Auto-select projects matching employee team
+        if (pList.length > 0) {
+          const cleanTeam = (request.employee_team || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+          const matchingProjects = pList.filter((p) => {
+            const cleanKey = p.key.toLowerCase();
+            const cleanName = p.name.toLowerCase().replace(/[^a-z0-9]/g, "");
+            return cleanTeam.includes(cleanKey) || cleanTeam.includes(cleanName) || cleanName.includes(cleanTeam);
+          });
+          if (matchingProjects.length > 0) {
+            setSelectedProjects(matchingProjects.map((p) => p.key));
+          } else {
+            // Default to all active projects
+            setSelectedProjects(pList.map((p) => p.key));
+          }
+        }
+      })
+      .catch((err) => console.warn("Failed to load Jira metadata", err))
+      .finally(() => {
+        if (active) setLoadingData(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [request.employee_team]);
+
+  const toggleProject = (key) => {
+    setSelectedProjects((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  };
+
+  return (
+    <Modal
+      title={`Configure Jira Access — ${request.employee_name}`}
+      onClose={onClose}
+      width={600}
+      footer={
+        <>
+          <button className="btn btn-secondary" onClick={onClose} disabled={loading}>
+            Cancel
+          </button>
+          <LoadingButton
+            className="btn btn-primary"
+            loading={loading}
+            onClick={() =>
+              onConfirm({
+                jira_group: selectedGroup,
+                jira_project_keys: selectedProjects,
+              })
+            }
+          >
+            Confirm & Grant Jira Access
+          </LoadingButton>
+        </>
+      }
+    >
+      {/* 1. Employee Context Grid */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: "10px 16px",
+          padding: "12px 16px",
+          background: "rgba(37, 99, 235, 0.04)",
+          borderRadius: 8,
+          marginBottom: 18,
+          border: "1px solid rgba(37, 99, 235, 0.12)",
+          fontSize: 12.8,
+        }}
+      >
+        <div>
+          <span style={{ color: "#64748b", display: "block", fontSize: 11, marginBottom: 2 }}>EMPLOYEE</span>
+          <strong style={{ color: "#0f172a", fontSize: 13.5 }}>{request.employee_name}</strong>
+        </div>
+        <div>
+          <span style={{ color: "#64748b", display: "block", fontSize: 11, marginBottom: 2 }}>EMAIL</span>
+          <span style={{ color: "#0f172a", fontFamily: "var(--font-mono, monospace)", fontSize: 12.5 }}>
+            {request.employee_email}
+          </span>
+        </div>
+        <div>
+          <span style={{ color: "#64748b", display: "block", fontSize: 11, marginBottom: 2 }}>ASSIGNED TEAM</span>
+          <span style={{ fontWeight: 600, color: "#1e293b" }}>{request.employee_team || "Engineering Team"}</span>
+        </div>
+        <div>
+          <span style={{ color: "#64748b", display: "block", fontSize: 11, marginBottom: 2 }}>ROLE</span>
+          <span style={{ fontWeight: 600, color: "#1e293b" }}>{request.employee_role || "Software Engineer"}</span>
+        </div>
+      </div>
+
+      {loadingData ? (
+        <div style={{ textAlign: "center", padding: "32px 0", color: "#64748b" }}>
+          <span className="spinner spinner-dark" style={{ width: 22, height: 22, display: "inline-block", marginBottom: 10 }} />
+          <div style={{ fontSize: 13 }}>Loading live Jira Groups & Projects...</div>
+        </div>
+      ) : (
+        <>
+          {/* Jira User Group */}
+          <div className="field" style={{ marginBottom: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+              <label style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>
+                Primary Jira User Group
+              </label>
+              {request.employee_team && isAutoMatched && (
+                <span
+                  style={{
+                    fontSize: 11,
+                    background: "rgba(16, 185, 129, 0.1)",
+                    color: "#059669",
+                    padding: "2px 8px",
+                    borderRadius: 4,
+                    fontWeight: 600,
+                  }}
+                >
+                  🎯 Auto-selected for {request.employee_team}
+                </span>
+              )}
+            </div>
+            <select
+              className="input"
+              style={{ width: "100%", height: 38, fontSize: 13.5 }}
+              value={selectedGroup}
+              onChange={(e) => {
+                setSelectedGroup(e.target.value);
+                setIsAutoMatched(false);
+              }}
+            >
+              {groups.map((g) => (
+                <option key={g.name} value={g.name}>
+                  {g.name}
+                </option>
+              ))}
+              {groups.length === 0 && (
+                <option value="jira-software-users">jira-software-users (Default)</option>
+              )}
+            </select>
+          </div>
+
+          {/* Project Assignments */}
+          <div className="field" style={{ marginBottom: 10 }}>
+            <label style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", display: "block", marginBottom: 6 }}>
+              Assign to Jira Projects (Member Role)
+            </label>
+            <div
+              style={{
+                maxHeight: 180,
+                overflowY: "auto",
+                border: "1px solid #e2e8f0",
+                borderRadius: 6,
+                padding: 6,
+                background: "#ffffff",
+                display: "flex",
+                flexDirection: "column",
+                gap: 6,
+              }}
+            >
+              {projects.map((p) => {
+                const isChecked = selectedProjects.includes(p.key);
+                return (
+                  <label
+                    key={p.key}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      padding: "8px 12px",
+                      borderRadius: 6,
+                      background: isChecked ? "rgba(37, 99, 235, 0.05)" : "#ffffff",
+                      border: isChecked ? "1px solid #3b82f6" : "1px solid #f1f5f9",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => toggleProject(p.key)}
+                      style={{ width: 16, height: 16, accentColor: "#2563eb" }}
+                    />
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontWeight: 600, fontSize: 13, color: isChecked ? "#1d4ed8" : "#0f172a" }}>
+                        {p.name}
+                      </span>
+                      <span style={{ marginLeft: 8, fontSize: 11, color: "#64748b", fontFamily: "monospace" }}>
+                        ({p.key})
+                      </span>
+                    </div>
+                  </label>
+                );
+              })}
+              {projects.length === 0 && (
+                <div style={{ textAlign: "center", padding: "12px 0", color: "#94a3b8", fontSize: 12 }}>
+                  No active projects found in Jira
+                </div>
+              )}
+            </div>
+            <div style={{ fontSize: 11, color: "#64748b", marginTop: 5 }}>
+              The employee will be added as a project Member so they can view boards, create, and resolve issues.
+            </div>
+          </div>
+        </>
+      )}
+    </Modal>
+  );
+}
+
 export default function ToolRequests() {
   const toast = useToast();
   const [requests, setRequests] = useState([]);
@@ -408,6 +797,8 @@ export default function ToolRequests() {
   const [filter, setFilter] = useState("pending");
   const [actingOn, setActingOn] = useState(null); // request id currently being approved/rejected
   const [awsModalReq, setAwsModalReq] = useState(null);
+  const [githubModalReq, setGithubModalReq] = useState(null);
+  const [jiraModalReq, setJiraModalReq] = useState(null);
 
   function load(currentFilter) {
     setLoading(true);
@@ -425,6 +816,10 @@ export default function ToolRequests() {
   function handleApproveClick(req) {
     if (req.provider_key === "aws") {
       setAwsModalReq(req);
+    } else if (req.provider_key === "github") {
+      setGithubModalReq(req);
+    } else if (req.provider_key === "jira") {
+      setJiraModalReq(req);
     } else {
       executeApprove(req);
     }
@@ -440,6 +835,8 @@ export default function ToolRequests() {
         toast.error(data.provisioning_message || "Approval did not complete as expected.");
       }
       setAwsModalReq(null);
+      setGithubModalReq(null);
+      setJiraModalReq(null);
       load(filter);
     } catch (err) {
       toast.error(extractErrorMessage(err, "Could not approve this request."));
@@ -631,6 +1028,26 @@ export default function ToolRequests() {
           onClose={() => setAwsModalReq(null)}
           onConfirm={(payload) => executeApprove(awsModalReq, payload)}
           loading={actingOn === awsModalReq.id}
+        />
+      )}
+
+      {/* GitHub Dynamic Team & Role Modal */}
+      {githubModalReq && (
+        <GitHubApprovalModal
+          request={githubModalReq}
+          onClose={() => setGithubModalReq(null)}
+          onConfirm={(payload) => executeApprove(githubModalReq, payload)}
+          loading={actingOn === githubModalReq.id}
+        />
+      )}
+
+      {/* Jira Dynamic Group & Project Assignment Modal */}
+      {jiraModalReq && (
+        <JiraApprovalModal
+          request={jiraModalReq}
+          onClose={() => setJiraModalReq(null)}
+          onConfirm={(payload) => executeApprove(jiraModalReq, payload)}
+          loading={actingOn === jiraModalReq.id}
         />
       )}
     </div>

@@ -16,13 +16,88 @@ api.interceptors.request.use((config) => {
 // Centralized 401 handling: drop the token and bounce to login.
 // We avoid importing the router here to keep this module dependency-free;
 // AuthContext listens for this event instead.
+let isRefreshing = false;
+let failedQueue = [];
+
+const processQueue = (error, token = null) => {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+  failedQueue = [];
+};
+
+// Centralized 401 handling with silent token refresh:
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error?.response?.status === 401) {
-      window.dispatchEvent(new CustomEvent("auth:unauthorized"));
+  async (error) => {
+    const originalRequest = error?.config;
+
+    // If no response or not a 401, or already retried, reject immediately
+    if (!error.response || error.response.status !== 401) {
+      return Promise.reject(error);
     }
-    return Promise.reject(error);
+
+    // Do not attempt to refresh for login or refresh endpoints
+    const url = originalRequest?.url || "";
+    if (url.includes("/auth/login") || url.includes("/auth/refresh")) {
+      return Promise.reject(error);
+    }
+
+    if (originalRequest._retry) {
+      window.dispatchEvent(new CustomEvent("auth:unauthorized"));
+      return Promise.reject(error);
+    }
+
+    const refreshToken = localStorage.getItem("refresh_token");
+    if (!refreshToken) {
+      window.dispatchEvent(new CustomEvent("auth:unauthorized"));
+      return Promise.reject(error);
+    }
+
+    if (isRefreshing) {
+      return new Promise((resolve, reject) => {
+        failedQueue.push({ resolve, reject });
+      })
+        .then((newToken) => {
+          originalRequest.headers.Authorization = `Bearer ${newToken}`;
+          return api(originalRequest);
+        })
+        .catch((err) => Promise.reject(err));
+    }
+
+    originalRequest._retry = true;
+    isRefreshing = true;
+
+    try {
+      // Call refresh using base axios to bypass interceptors
+      const { data } = await axios.post(`${baseURL}/auth/refresh`, {
+        refresh_token: refreshToken,
+      });
+
+      const { access_token, refresh_token: newRefreshToken } = data;
+      localStorage.setItem("access_token", access_token);
+      if (newRefreshToken) {
+        localStorage.setItem("refresh_token", newRefreshToken);
+      }
+
+      api.defaults.headers.common.Authorization = `Bearer ${access_token}`;
+      originalRequest.headers.Authorization = `Bearer ${access_token}`;
+
+      processQueue(null, access_token);
+      return api(originalRequest);
+    } catch (refreshError) {
+      processQueue(refreshError, null);
+      localStorage.removeItem("access_token");
+      localStorage.removeItem("refresh_token");
+      window.dispatchEvent(new CustomEvent("auth:unauthorized"));
+      return Promise.reject(refreshError);
+    } finally {
+      isRefreshing = false;
+    }
   }
 );
 

@@ -121,8 +121,75 @@ class JiraConnector:
 
         raise RuntimeError(f"Could not invite user to Jira ({resp.status_code}): {error_msg}")
 
-    def grant_access(self, identifier: str) -> str:
-        """Grants Jira access by finding or inviting the user, then adding them to the Jira Software group."""
+    def list_groups(self) -> list[dict]:
+        """Returns all user groups in Jira Cloud."""
+        self._check_configured()
+        base = self._base_url()
+        url = f"{base}/rest/api/3/groups/picker?maxResults=50"
+        resp = requests.get(url, auth=self._auth(), headers=self._headers(), timeout=15)
+        if resp.status_code != 200:
+            raise RuntimeError(f"Jira API error listing groups ({resp.status_code}): {resp.text}")
+        groups = resp.json().get("groups", [])
+        return [{"name": g["name"]} for g in groups]
+
+    def list_projects(self) -> list[dict]:
+        """Returns all active projects in Jira Cloud."""
+        self._check_configured()
+        base = self._base_url()
+        url = f"{base}/rest/api/3/project"
+        resp = requests.get(url, auth=self._auth(), headers=self._headers(), timeout=15)
+        if resp.status_code != 200:
+            raise RuntimeError(f"Jira API error listing projects ({resp.status_code}): {resp.text}")
+        return [
+            {
+                "id": p["id"],
+                "key": p["key"],
+                "name": p["name"],
+                "project_type": p.get("projectTypeKey", "software"),
+            }
+            for p in resp.json()
+        ]
+
+    def _assign_project_role(self, project_key: str, account_id: str) -> Optional[str]:
+        """Assigns the user to the Member role of a project."""
+        base = self._base_url()
+        roles_url = f"{base}/rest/api/3/project/{project_key}/role"
+        resp = requests.get(roles_url, auth=self._auth(), headers=self._headers(), timeout=15)
+        if resp.status_code != 200:
+            return None
+
+        roles = resp.json()
+        # Look for 'Member', 'Developers', or fallback to first non-Administrator role
+        target_role_url = roles.get("Member") or roles.get("Developers")
+        if not target_role_url:
+            for r_name, r_url in roles.items():
+                if "admin" not in r_name.lower():
+                    target_role_url = r_url
+                    break
+
+        if not target_role_url:
+            return None
+
+        role_id = target_role_url.rstrip("/").split("/")[-1]
+        assign_url = f"{base}/rest/api/3/project/{project_key}/role/{role_id}"
+        add_resp = requests.post(
+            assign_url,
+            auth=self._auth(),
+            headers=self._headers(),
+            json={"user": [account_id]},
+            timeout=15
+        )
+        if add_resp.status_code in (200, 201):
+            return project_key
+        return None
+
+    def grant_access(
+        self,
+        identifier: str,
+        group_name: Optional[str] = None,
+        project_keys: Optional[list[str]] = None
+    ) -> str:
+        """Grants Jira access by finding or inviting the user, adding them to the target group, and assigning project roles."""
         self._check_configured()
         identifier = identifier.strip()
 
@@ -145,12 +212,12 @@ class JiraConnector:
         if not account_id:
             raise RuntimeError(f"Could not resolve a valid Jira account ID for '{identifier}'")
 
-        # Step 2: Resolve the target Jira Software group
-        group_name = self._resolve_group_name()
+        # Step 2: Resolve the target Jira group
+        active_group = group_name.strip() if group_name and group_name.strip() else self._resolve_group_name()
 
         # Step 3: Add user to group
         base = self._base_url()
-        url = f"{base}/rest/api/3/group/user?groupname={group_name}"
+        url = f"{base}/rest/api/3/group/user?groupname={active_group}"
         resp = requests.post(
             url,
             auth=self._auth(),
@@ -159,17 +226,29 @@ class JiraConnector:
             timeout=15
         )
 
-        if resp.status_code in (200, 201):
-            return f"Granted Jira access to '{display_name}' (added to group '{group_name}')"
+        group_success = resp.status_code in (200, 201) or (
+            resp.status_code == 400 and ("already" in resp.text.lower() or "member" in resp.text.lower())
+        )
+        if not group_success:
+            raise RuntimeError(f"Jira API error adding user to group ({resp.status_code}): {resp.text}")
 
-        # If user is already a member
-        if resp.status_code == 400 and ("already" in resp.text.lower() or "member" in resp.text.lower()):
-            return f"User '{display_name}' already has Jira access (already a member of group '{group_name}')"
+        # Step 4: Assign to specific projects if provided
+        assigned_projects = []
+        if project_keys:
+            for p_key in project_keys:
+                clean_key = p_key.strip().upper()
+                if clean_key:
+                    res = self._assign_project_role(clean_key, account_id)
+                    if res:
+                        assigned_projects.append(res)
 
-        raise RuntimeError(f"Jira API error adding user to group ({resp.status_code}): {resp.text}")
+        msg = f"Granted Jira access to '{display_name}' (Group: {active_group})"
+        if assigned_projects:
+            msg += f" (Projects: {', '.join(assigned_projects)})"
+        return msg
 
     def revoke_access(self, identifier: str) -> str:
-        """Revokes Jira access by removing the user from the Jira Software group."""
+        """Revokes Jira access by dynamically identifying the user's groups and removing them."""
         self._check_configured()
         identifier = identifier.strip()
 
@@ -178,17 +257,45 @@ class JiraConnector:
             return f"User '{identifier}' not found in Jira (access may already be revoked or never granted)"
 
         account_id = user["accountId"]
-        group_name = self._resolve_group_name()
-
         base = self._base_url()
-        url = f"{base}/rest/api/3/group/user?groupname={group_name}&accountId={account_id}"
-        resp = requests.delete(url, auth=self._auth(), headers=self._headers(), timeout=15)
 
-        if resp.status_code in (200, 204):
-            return f"Revoked Jira access for '{identifier}' (removed from group '{group_name}')"
+        # Step 1: Discover all groups the user actually belongs to
+        target_groups = set()
+        try:
+            u_resp = requests.get(
+                f"{base}/rest/api/3/user?accountId={account_id}&expand=groups",
+                auth=self._auth(),
+                headers=self._headers(),
+                timeout=15,
+            )
+            if u_resp.status_code == 200:
+                for g in u_resp.json().get("groups", {}).get("items", []):
+                    name = g.get("name")
+                    # Do not accidentally remove administrative / org admin roles
+                    if name and name not in ("org-admins", "site-admins", "system-administrators"):
+                        target_groups.add(name)
+        except Exception:
+            pass
 
-        if resp.status_code == 404:
-            return f"User '{identifier}' was not in Jira group '{group_name}'"
+        # Fallback to resolved default group if none found
+        default_group = self._resolve_group_name()
+        if default_group:
+            target_groups.add(default_group)
 
-        raise RuntimeError(f"Jira API error revoking group access ({resp.status_code}): {resp.text}")
+        removed_from = []
+        for group_name in target_groups:
+            url = f"{base}/rest/api/3/group/user?groupname={group_name}&accountId={account_id}"
+            resp = requests.delete(url, auth=self._auth(), headers=self._headers(), timeout=15)
+
+            if resp.status_code in (200, 204):
+                removed_from.append(group_name)
+            elif resp.status_code in (400, 404):
+                # User was not a member of this specific group — perfectly fine
+                pass
+            else:
+                raise RuntimeError(f"Jira API error revoking group access ({resp.status_code}): {resp.text}")
+
+        if removed_from:
+            return f"Revoked Jira access for '{identifier}' (removed from group(s): {', '.join(removed_from)})"
+        return f"Revoked Jira access for '{identifier}' (user was already not in any assigned Jira groups)"
 
