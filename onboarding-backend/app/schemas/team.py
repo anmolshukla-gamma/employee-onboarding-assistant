@@ -95,6 +95,7 @@ class MyAccessItem(BaseModel):
     category: Optional[str] = None
     request_url: Optional[str] = None
     guide_text: Optional[str] = None
+    provider_key: Optional[str] = None
     is_mandatory: bool
     order: int
 

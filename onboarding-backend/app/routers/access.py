@@ -54,6 +54,7 @@ def get_my_access(
             category=tool.category,
             request_url=tool.request_url,
             guide_text=tool.guide_text,
+            provider_key=tool.provider_key,
             is_mandatory=row.is_mandatory,
             order=row.order
         )

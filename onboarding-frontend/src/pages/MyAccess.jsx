@@ -38,6 +38,28 @@ function ToolCard({ tool, request, onRequested }) {
   const [formError, setFormError] = useState("");
   const guide = hasGuide(tool.guide_text);
 
+  const key = (tool.provider_key || "").toLowerCase();
+  const name = (tool.name || "").toLowerCase();
+  const isDirectTool = key === "jira" || key === "aws" || name.includes("jira") || name.includes("aws");
+  const isGitHub = key === "github" || name.includes("github");
+
+  async function handleInstantRequest() {
+    setSubmitting(true);
+    setFormError("");
+    try {
+      await requestToolAccess({
+        tool_id: tool.tool_id,
+        identifier: user?.email || null,
+        reason: null,
+      });
+      onRequested();
+    } catch (err) {
+      setFormError(extractErrorMessage(err, "Could not submit the request."));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     setSubmitting(true);
@@ -71,71 +93,70 @@ function ToolCard({ tool, request, onRequested }) {
           )}
         </div>
 
-                <div style={{ flexShrink: 0, textAlign: "right" }}>
+        <div style={{ flexShrink: 0, textAlign: "right" }}>
           {request && (
             <span className={"badge " + (STATUS_CLASS[request.status] || "")}>
               {STATUS_LABEL[request.status] || request.status}
             </span>
           )}
-            {(!request || request.status === "failed" || request.status === "rejected" || request.status === "revoked") && (
+          {(!request || request.status === "failed" || request.status === "rejected" || request.status === "revoked") && (
             <div style={{ marginTop: request ? 6 : 0 }}>
               <button
                 type="button"
                 className="btn btn-primary btn-sm"
-                onClick={() => setShowForm((v) => !v)}
+                disabled={submitting}
+                onClick={() => {
+                  if (isDirectTool) {
+                    handleInstantRequest();
+                  } else {
+                    setShowForm((v) => !v);
+                  }
+                }}
               >
                 <IconKey width={13} height={13} />
-                {request ? "Try Again" : "Request Access"}
+                {submitting && isDirectTool
+                  ? "Requesting..."
+                  : request
+                  ? "Try Again"
+                  : "Request Access"}
               </button>
             </div>
           )}
-          {/* {tool.request_url && (
-            <div style={{ marginTop: 6 }}>
-              
-               <a href={tool.request_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn btn-ghost btn-sm"
-              >
-                Manual portal <IconExternalLink width={13} height={13} />
-              </a>
-            </div>
-          )} */}
         </div>
       </div>
 
-      {showForm && (!request || request.status === "failed" || request.status === "rejected" || request.status === "revoked") && (
+      {formError && isDirectTool && (
+        <div className="top-align-error" style={{ marginTop: 8 }}>
+          {formError}
+        </div>
+      )}
+
+      {!isDirectTool && showForm && (!request || request.status === "failed" || request.status === "rejected" || request.status === "revoked") && (
         <form onSubmit={handleSubmit} className="drawer-guide" style={{ marginTop: 12 }}>
-          {(tool.provider_key === "jira" || tool.provider_key === "aws") ? (
-            <div style={{ marginBottom: 12, padding: "8px 12px", background: "rgba(37, 99, 235, 0.06)", borderLeft: "3px solid #2563eb", borderRadius: 4, fontSize: 12.5, color: "#1e293b" }}>
-              📧 Account Email: <strong>{user?.email}</strong> <span style={{ color: "#64748b" }}>(automatically linked from your profile)</span>
-            </div>
-          ) : (
-            <div className="field" style={{ marginBottom: 10 }}>
-              <label className="text-muted" style={{ fontSize: 12, display: "block", marginBottom: 4 }}>
-                {tool.provider_key === "github"
-                  ? "GitHub Username (optional)"
-                  : "Account username or identifier (optional)"}
-              </label>
-              <input
-                className="input"
-                style={{ width: "100%" }}
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-                placeholder={
-                  tool.provider_key === "github"
-                    ? `Leave blank to invite profile email (${user?.email || "your email"})`
-                    : `Leave blank to use profile email (${user?.email || "your email"})`
-                }
-              />
-              {tool.provider_key === "github" && (
-                <div style={{ fontSize: 11, color: "#64748b", marginTop: 4, lineHeight: 1.4 }}>
-                  💡 If you have a GitHub account, enter your username for direct team access. Otherwise, leave blank to invite <strong>{user?.email}</strong>.
-                </div>
-              )}
-            </div>
-          )}
-                    <div className="field" style={{ marginBottom: 12 }}>
+          <div className="field" style={{ marginBottom: 10 }}>
+            <label className="text-muted" style={{ fontSize: 12, display: "block", marginBottom: 4 }}>
+              {isGitHub
+                ? "GitHub Username (optional)"
+                : "Account username or identifier (optional)"}
+            </label>
+            <input
+              className="input"
+              style={{ width: "100%" }}
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              placeholder={
+                isGitHub
+                  ? `Leave blank to invite profile email (${user?.email || "your email"})`
+                  : `Leave blank to use profile email (${user?.email || "your email"})`
+              }
+            />
+            {isGitHub && (
+              <div style={{ fontSize: 11, color: "#64748b", marginTop: 4, lineHeight: 1.4 }}>
+                💡 If you have a GitHub account, enter your username for direct team access. Otherwise, leave blank to invite <strong>{user?.email}</strong>.
+              </div>
+            )}
+          </div>
+          <div className="field" style={{ marginBottom: 12 }}>
             <label className="text-muted" style={{ fontSize: 12, display: "block", marginBottom: 4 }}>
               Reason (optional)
             </label>
